@@ -1,0 +1,11 @@
+This is a memo for this project.
+
+--------------------------------
+11/08/2015 09:59pm
+Yinlong Su
+
+Create basic files (include get_hw_addrs.c and hw_addrs.h from Asgn3_code).
+
+Caution: When compiling, several warnings will be prompted. The reason may be that libunp.a was built on 32-bit operating system but minix is running on 64-bit OS.
+
+For simplicity, Please use np.h as project header file. Write all defines, structures and function declarations in it.
