@@ -28,8 +28,8 @@ server_yinlsu: server.o get_hw_addrs.o
 server.o: server.c
 	${CC} ${CFLAGS} -c server.c
 
-client_yinlsu: client.o
-	${CC} ${CFLAGS} -o client_yinlsu client.o ${LIBS}
+client_yinlsu: client.o odr_frame.o get_hw_addrs.o
+	${CC} ${CFLAGS} -o client_yinlsu client.o odr_frame.o get_hw_addrs.o ${LIBS}
 
 client.o: client.c
 	${CC} ${CFLAGS} -c client.c

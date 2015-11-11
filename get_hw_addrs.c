@@ -1,11 +1,14 @@
-#include <errno.h>      /* error numbers */
-#include <sys/ioctl.h>  /* ioctls */
-#include <net/if.h>     /* generic interface structures */
+/*
+* @File: get_hw_addrs.c
+* @Date: 2015-11-11 10:04:27
+* @Last Modified by:   Yinlong Su
+* @Last Modified time: 2015-11-11 10:26:25
+*/
 
-#include "hw_addrs.h"
+#include "np.h"
 
-struct hwa_info *get_hw_addrs() {
-    struct hwa_info *hwa, *hwahead, **hwapnext;
+odr_itable *get_hw_addrs(char *obj_ipaddr) {
+    odr_itable *hwa, *hwahead, **hwapnext;
     int   sockfd, len, lastlen, alias, nInterfaces, i;
     char  *ptr, *buf, lastname[IF_NAME], *cptr;
     struct ifconf ifc;
@@ -40,6 +43,14 @@ struct hwa_info *get_hw_addrs() {
     nInterfaces = ifc.ifc_len / sizeof(struct ifreq);
     for(i = 0; i < nInterfaces; i++)  {
         item = &ifr[i];
+
+        if (strcmp(item->ifr_name, "lo") == 0)
+            continue;
+        if (strcmp(item->ifr_name, "eth0") == 0) {
+            strcpy(obj_ipaddr, Sock_ntop_host( (struct sockaddr *)&item->ifr_addr, sizeof(struct sockaddr)));
+            continue;
+        }
+
         alias = 0;
         hwa = (struct hwa_info *) Calloc(1, sizeof(struct hwa_info));
         memcpy(hwa->if_name, item->ifr_name, IF_NAME);    /* interface name */
@@ -81,10 +92,10 @@ void free_hwa_info(struct hwa_info *hwahead) {
 }
 /* end free_hwa_info */
 
-struct hwa_info *Get_hw_addrs() {
+struct hwa_info *Get_hw_addrs(char *obj_ipaddr) {
     struct hwa_info  *hwa;
 
-    if ( (hwa = get_hw_addrs()) == NULL)
+    if ( (hwa = get_hw_addrs(obj_ipaddr)) == NULL)
         err_quit("get_hw_addrs error");
     return(hwa);
 }

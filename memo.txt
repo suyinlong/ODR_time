@@ -49,4 +49,16 @@ eth2 :
          HW addr = 00:0c:29:49:3f:6f
          interface index = 4
 
-It seems that recvfrom will not fill the sender's address as well as the interface index. We may need to create multiple PF_PACKET sockets.
+--------------------------------
+11/11/2015 11:20am
+Yinlong Su
+
+1 - - - - - 4 - - - - - 7 - 8
+|           |
+1 - 2 - 3   |
+        |   |
+        3 - 4 - 5 - 6
+                    |
+                    6 - - - - - 9
+                                |
+                                9 - 0

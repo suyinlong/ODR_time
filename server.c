@@ -1,8 +1,8 @@
 /*
-* @Author: Yinlong Su
-* @Date:   2015-11-08 20:56:53
+* @File: server.c
+* @Date: 2015-11-08 20:56:53
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-08 21:49:40
+* @Last Modified time: 2015-11-11 10:31:37
 */
 
 #include "np.h"
@@ -12,10 +12,11 @@ int main(int argc, char **argv) {
     struct sockaddr *sa;
     char   *ptr;
     int    i, prflag;
+    char ipaddr[IPADDR_BUFFSIZE];
 
     printf("char* size=%ld, void* size=%ld, int size=%ld\n", sizeof(char*), sizeof(void*), sizeof(int));
 
-    for (hwahead = hwa = Get_hw_addrs(); hwa != NULL; hwa = hwa->hwa_next) {
+    for (hwahead = hwa = Get_hw_addrs(ipaddr); hwa != NULL; hwa = hwa->hwa_next) {
 
         printf("%s :%s", hwa->if_name, ((hwa->ip_alias) == IP_ALIAS) ? " (alias)\n" : "\n");
 

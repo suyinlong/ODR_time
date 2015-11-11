@@ -1,8 +1,8 @@
 /*
-* @Author: Yinlong Su
-* @Date:   2015-11-10 22:56:21
+* @File: utils.c
+* @Date: 2015-11-10 22:56:21
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-10 23:02:14
+* @Last Modified time: 2015-11-11 09:51:24
 */
 
 #include "np.h"
