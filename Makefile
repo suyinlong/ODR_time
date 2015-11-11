@@ -10,11 +10,17 @@ CFLAGS = ${FLAGS} -I${UNP_DIR}/lib
 
 all: ODR_yinlsu server_yinlsu client_yinlsu
 
-ODR_yinlsu: odr.o
-	${CC} ${CFLAGS} -o ODR_yinlsu odr.o ${LIBS}
+utils.o: utils.c
+	${CC} ${CFLAGS} -c utils.c
+
+ODR_yinlsu: odr.o odr_frame.o utils.o get_hw_addrs.o
+	${CC} ${CFLAGS} -o ODR_yinlsu odr.o odr_frame.o utils.o get_hw_addrs.o ${LIBS}
 
 odr.o: odr.c
 	${CC} ${CFLAGS} -c odr.c
+
+odr_frame.o: odr_frame.c
+	${CC} ${CFLAGS} -c odr_frame.c
 
 server_yinlsu: server.o get_hw_addrs.o
 	${CC} ${CFLAGS} -o server_yinlsu server.o get_hw_addrs.o ${LIBS}

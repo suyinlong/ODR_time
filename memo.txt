@@ -9,3 +9,44 @@ Create basic files (include get_hw_addrs.c and hw_addrs.h from Asgn3_code).
 Caution: When compiling, several warnings will be prompted. The reason may be that libunp.a was built on 32-bit operating system but minix is running on 64-bit OS.
 
 For simplicity, Please use np.h as project header file. Write all defines, structures and function declarations in it.
+
+--------------------------------
+11/10/2015 11:32pm
+Yinlong Su
+
+Servers:
+130.245.156.19  minix
+130.245.156.20  vm10
+130.245.156.21  vm1
+130.245.156.22  vm2
+130.245.156.23  vm3
+130.245.156.24  vm4
+130.245.156.25  vm5
+130.245.156.26  vm6
+130.245.156.27  vm7
+130.245.156.28  vm8
+130.245.156.29  vm9
+
+The interface information on vm1
+
+lo :
+         IP addr = 127.0.0.1
+
+         interface index = 1
+
+eth0 :
+         IP addr = 130.245.156.21
+         HW addr = 00:0c:29:49:3f:5b
+         interface index = 2
+
+eth1 :
+         IP addr = 192.168.10.1
+         HW addr = 00:0c:29:49:3f:65
+         interface index = 3
+
+eth2 :
+         IP addr = 192.168.12.1
+         HW addr = 00:0c:29:49:3f:6f
+         interface index = 4
+
+It seems that recvfrom will not fill the sender's address as well as the interface index. We may need to create multiple PF_PACKET sockets.
