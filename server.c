@@ -2,48 +2,37 @@
 * @File: server.c
 * @Date: 2015-11-08 20:56:53
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-11 10:31:37
+* @Last Modified time: 2015-11-11 22:48:32
 */
 
 #include "np.h"
 
 int main(int argc, char **argv) {
-    struct hwa_info *hwa, *hwahead;
-    struct sockaddr *sa;
-    char   *ptr;
-    int    i, prflag;
-    char ipaddr[IPADDR_BUFFSIZE];
+    int sockfd;
+    char buff[255];
+    struct sockaddr_un servaddr, odraddr;
 
-    printf("char* size=%ld, void* size=%ld, int size=%ld\n", sizeof(char*), sizeof(void*), sizeof(int));
+    sockfd = Socket(AF_LOCAL, SOCK_DGRAM, 0);
 
-    for (hwahead = hwa = Get_hw_addrs(ipaddr); hwa != NULL; hwa = hwa->hwa_next) {
+    bzero(&servaddr, sizeof(servaddr));
+    servaddr.sun_family = AF_LOCAL;
+    strcpy(servaddr.sun_path, TIMESERV_PATH);
 
-        printf("%s :%s", hwa->if_name, ((hwa->ip_alias) == IP_ALIAS) ? " (alias)\n" : "\n");
+    bzero(&odraddr, sizeof(odraddr));
+    odraddr.sun_family = AF_LOCAL;
+    strcpy(odraddr.sun_path, ODR_PATH);
 
-        if ( (sa = hwa->ip_addr) != NULL)
-            printf("         IP addr = %s\n", Sock_ntop_host(sa, sizeof(*sa)));
+    Bind(sockfd, (SA *)&servaddr, sizeof(servaddr));
 
-        prflag = 0;
-        i = 0;
-        do {
-            if (hwa->if_haddr[i] != '\0') {
-                prflag = 1;
-                break;
-            }
-        } while (++i < IF_HADDR);
+    printf("%s\n", servaddr.sun_path);
 
-        if (prflag) {
-            printf("         HW addr = ");
-            ptr = hwa->if_haddr;
-            i = IF_HADDR;
-            do {
-                printf("%.2x%s", *ptr++ & 0xff, (i == 1) ? " " : ":");
-            } while (--i > 0);
-        }
+    strcpy(buff, "Test.");
+    Sendto(sockfd, buff, 255, 0, (SA *)&odraddr, sizeof(odraddr));
 
-        printf("\n         interface index = %d\n\n", hwa->if_index);
-    }
 
-    free_hwa_info(hwahead);
+
+    unlink(servaddr.sun_path);
+
+
     exit(0);
 }
