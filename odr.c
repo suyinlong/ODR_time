@@ -2,7 +2,7 @@
 * @File: odr.c
 * @Date: 2015-11-08 20:56:07
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-12 23:19:44
+* @Last Modified time: 2015-11-12 23:49:24
 */
 
 #include "np.h"
@@ -31,7 +31,7 @@ void debug_data(odr_frame *frame, struct sockaddr_ll *from, socklen_t fromlen) {
     printf("Interface index: %d, MAC address: ", from->sll_ifindex);
     for (i = 0; i < 6; i++)
         printf("%.2x%s", from->sll_addr[i] & 0xff, ((i == 5) ? " " : ":"));
-    printf("Data: %s Len: %d\n", frame->data, fromlen);
+    printf("Data: %s\n", frame->data);
 }
 
 void process_frame(odr_object *obj) {
