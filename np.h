@@ -22,14 +22,25 @@
 #define IPADDR_BUFFSIZE     20
 #define HWADDR_BUFFSIZE     6
 #define HOSTNAME_BUFFSIZE   10
+#define PATHNAME_BUFFSIZE   108
 
-#define RTABLE_SIZE         20
+#define ODR_FRAME_PAYLOAD   108
 
-#define IF_NAME     16  /* same as IFNAMSIZ    in <net/if.h> */
-#define IF_HADDR    6   /* same as IFHWADDRLEN in <net/if.h> */
-#define IP_ALIAS    1   /* hwa_addr is an alias */
+#define ODR_FRAME_RREQ      0
+#define ODR_FRAME_RREP      1
+#define ODR_FRAME_APPMSG    2
+#define ODR_FRAME_ROUTE     3
+#define ODR_FRAME_DATA      9
 
-typedef unsigned char uchar;
+#define IF_NAME             16
+#define IF_HADDR            6
+#define IP_ALIAS            1
+
+typedef unsigned char   BITFIELD8;
+typedef unsigned char   uchar;
+typedef unsigned short  ushort;
+typedef unsigned int    uint;
+typedef unsigned long   ulong;
 
 typedef struct hwa_info {
     char    if_name[IF_NAME];       /* interface name, null terminated */
@@ -46,39 +57,77 @@ odr_itable     *Get_hw_addrs(char*);
 void free_hwa_info(odr_itable *);
 
 typedef struct odr_rtable_t {
-    char    dst[IPADDR_BUFFSIZE];    //
+    char    dst[IPADDR_BUFFSIZE];
     char    nexthop[HWADDR_BUFFSIZE];
     int     index;
-    int     hops;
+    uint    hopcnt;
+    uint    bcast_id;
     long    timestamp;
+    struct odr_rtable_t *next;
 } odr_rtable;
 
-// odr_frame has 60 bytes, plus 4 Frame Check Sequence (CRC) equals 64 bytes
+typedef struct odr_ptable_t {
+    int     port;                       /* port number  */
+    char    path[PATHNAME_BUFFSIZE];    /* path name    */
+    ulong   timestamp;                  /* timestamp    */
+    struct odr_ptable_t *next;          /* next item    */
+} odr_ptable;
+
+// odr_frame has 124 bytes, plus 4 Frame Check Sequence (CRC) equals 128 bytes
 typedef struct odr_frame_t {
-    unsigned char   h_dest[ETH_ALEN];   /* destination eth addr */
-    unsigned char   h_source[ETH_ALEN]; /* source ether addr    */
-    unsigned short  h_proto;            /* packet type ID field */
-    char            data[46];
+    uchar   h_dest[ETH_ALEN];   /* destination eth addr */
+    uchar   h_source[ETH_ALEN]; /* source ether addr    */
+    ushort  h_proto;            /* packet type ID field */
+    ushort  h_type;             /* frame type           */
+    char    data[ODR_FRAME_PAYLOAD];
 }__attribute__((packed)) odr_frame;
 
-typedef struct odr_msg_t {
-    int     type;
-} odr_msg;
+
+typedef struct odr_rpacket_flag_t {
+    BITFIELD8   req : 1; /* RREQ flag */
+    BITFIELD8   rep : 1; /* RREP flag */
+    BITFIELD8   frd : 1; /* forced (re)discovery flag */
+    BITFIELD8   res : 1; /* reply already sent flag */
+    BITFIELD8   r04 : 1;
+    BITFIELD8   r05 : 1;
+    BITFIELD8   r06 : 1;
+    BITFIELD8   r07 : 1;
+} odr_rpacket_flag;
+
+typedef struct odr_rpacket_t {
+    char                dst[IPADDR_BUFFSIZE];   /* destination ip addr  */
+    char                src[IPADDR_BUFFSIZE];   /* source ip addr       */
+    odr_rpacket_flag    flag;                   /* route packet flag    */
+    uint                hopcnt;                 /* hop count            */
+    uint                bcast_id;               /* broadcast id         */
+    char                unused[59];             /* padding              */
+} odr_rpacket;
+
+typedef struct odr_apacket_t {
+    char    dst[IPADDR_BUFFSIZE];
+    int     dst_port;
+    char    src[IPADDR_BUFFSIZE];
+    int     src_port;
+    int     length;
+    char    data[56];
+} odr_apacket;
 
 typedef struct odr_queue_t {
-    odr_msg             msg;
+    odr_frame frame;
     struct odr_queue_t  *next;
 } odr_queue;
 
 typedef struct odr_object_t {
-    unsigned long   staleness;                      /* in seconds */
-    odr_itable      *itable;                        /* Hardware information*/
-    char            ipaddr[IPADDR_BUFFSIZE];        /* IP address */
-    char            hostname[HOSTNAME_BUFFSIZE];    /* Host name */
-    odr_rtable      *rtable[RTABLE_SIZE];           /* routing table */
-    odr_queue       *queue;                         /* ODR message queue */
-    int             d_sockfd;                       /* Domain socket */
-    int             p_sockfd;                       /* PF_PACKET socket */
+    unsigned long   staleness;                      /* in seconds           */
+    char            ipaddr[IPADDR_BUFFSIZE];        /* IP address           */
+    char            hostname[HOSTNAME_BUFFSIZE];    /* Host name            */
+    odr_itable      *itable;                        /* Hardware information */
+    odr_rtable      *rtable;                        /* routing table        */
+    odr_ptable      *ptable;                        /* port and path table  */
+    odr_queue       *queue;                         /* ODR message queue    */
+    int             d_sockfd;                       /* Domain socket        */
+    int             p_sockfd;                       /* PF_PACKET socket     */
+    uint            bcast_id;                       /* Broadcast ID         */
 } odr_object;
 
 void util_ip_to_hostname(const char *, char *);

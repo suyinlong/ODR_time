@@ -2,7 +2,7 @@
 * @File: odr_frame.c
 * @Date: 2015-11-10 22:45:45
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-11 17:33:54
+* @Last Modified time: 2015-11-12 23:15:03
 */
 
 #include "np.h"
@@ -13,6 +13,7 @@ void build_frame_header(odr_frame *frame, uchar *dst_mac, uchar *src_mac) {
     memcpy(frame->h_source, src_mac, ETH_ALEN);
 
     frame->h_proto = htons(PROTOCOL_ID);
+    frame->h_type = (ODR_FRAME_DATA);
 }
 
 int send_frame(int sockfd, int if_index, uchar *src_mac, uchar *dst_mac, uchar pkttype, uchar *data, int datalen) {
@@ -41,7 +42,7 @@ int send_frame(int sockfd, int if_index, uchar *src_mac, uchar *dst_mac, uchar p
     // datapayload
     memcpy(frame.data, data, datalen);
 
-    return sendto(sockfd, frame, sizeof(frame), 0,
+    return sendto(sockfd, &frame, sizeof(frame), 0,
           (struct sockaddr*)&socket_address, sizeof(socket_address));
 
 }
@@ -51,22 +52,6 @@ int send_bcast_frame(int sockfd, int if_index, uchar *src_mac, uchar *data, int 
     return send_frame(sockfd, if_index, src_mac, dst_mac, PACKET_BROADCAST, data, datalen);
 }
 
-int recv_frame(int sockfd) {
-    int i;
-    struct sockaddr_ll recv_address;
-    bzero(&recv_address, sizeof(struct sockaddr_ll));
-    socklen_t addrlen;
-
-    odr_frame frame;
-    bzero(&frame, sizeof(frame));
-
-    int length = 0;
-    length = recvfrom(sockfd, &frame, sizeof(frame), 0, (struct sockaddr*)&recv_address, &addrlen);
-
-    printf("Interface index: %d, MAC address: ", recv_address.sll_ifindex);
-
-    for (i = 0; i < 6; i++)
-        printf("%.2x ", recv_address.sll_addr[i] & 0xff);
-    printf("%s\n", frame.data);
-    return length;
+int recv_frame(int sockfd, odr_frame *frame, struct sockaddr *from, socklen_t *fromlen) {
+    return recvfrom(sockfd, frame, sizeof(odr_frame), 0, from, fromlen);
 }
