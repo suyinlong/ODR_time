@@ -2,11 +2,24 @@
 * @File: get_hw_addrs.c
 * @Date: 2015-11-11 10:04:27
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-11 10:26:25
+* @Last Modified time: 2015-11-13 20:46:13
 */
 
 #include "np.h"
 
+/* --------------------------------------------------------------------------
+ *  get_hw_addrs
+ *
+ *  Get interfaces information
+ *
+ *  @param  : char  *obj_ipaddr [point to the primary IP address of node]
+ *  @return : odr_itable *      [head of interface table]
+ *
+ *  Use ioctl() to get all interfaces information, ignoring lo and eth0.
+ *  Get the node's primary IP address from interface eth0
+ *  Build the information of interfaces into odr_itable
+ * --------------------------------------------------------------------------
+ */
 odr_itable *get_hw_addrs(char *obj_ipaddr) {
     odr_itable *hwa, *hwahead, **hwapnext;
     int   sockfd, len, lastlen, alias, nInterfaces, i;
@@ -81,8 +94,19 @@ odr_itable *get_hw_addrs(char *obj_ipaddr) {
     return(hwahead);  /* pointer to first structure in linked list */
 }
 
-void free_hwa_info(struct hwa_info *hwahead) {
-    struct hwa_info  *hwa, *hwanext;
+/* --------------------------------------------------------------------------
+ *  free_hwa_info
+ *
+ *  odr_itable free function
+ *
+ *  @param  : odr_itable    *hwahead    [head of interface table]
+ *  @return : void
+ *
+ *  Free the memory space of interface table
+ * --------------------------------------------------------------------------
+ */
+void free_hwa_info(odr_itable *hwahead) {
+    odr_itable *hwa, *hwanext;
 
     for (hwa = hwahead; hwa != NULL; hwa = hwanext) {
         free(hwa->ip_addr);
@@ -92,8 +116,20 @@ void free_hwa_info(struct hwa_info *hwahead) {
 }
 /* end free_hwa_info */
 
-struct hwa_info *Get_hw_addrs(char *obj_ipaddr) {
-    struct hwa_info  *hwa;
+/* --------------------------------------------------------------------------
+ *  Get_hw_addrs
+ *
+ *  Wrapper function of get_hw_addrs()
+ *
+ *  @param  : char  *obj_ipaddr [point to the primary IP address of node]
+ *  @return : odr_itable *      [head of interface table]
+ *
+ *  Call get_hw_addrs()
+ *  Quit if error
+ * --------------------------------------------------------------------------
+ */
+odr_itable *Get_hw_addrs(char *obj_ipaddr) {
+    odr_itable *hwa;
 
     if ( (hwa = get_hw_addrs(obj_ipaddr)) == NULL)
         err_quit("get_hw_addrs error");

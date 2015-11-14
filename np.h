@@ -24,7 +24,9 @@
 #define HOSTNAME_BUFFSIZE   10
 #define PATHNAME_BUFFSIZE   108
 
-#define ODR_FRAME_PAYLOAD   108
+#define ODR_FRAME_PAYLOAD   (124 - 2 * sizeof(uchar) * ETH_ALEN - 2 * sizeof(ushort))
+#define ODR_RPACKET_PAYLOAD (ODR_FRAME_PAYLOAD - 2 * sizeof(char) * IPADDR_BUFFSIZE - sizeof(odr_rpacket_flag) - 2 * sizeof(uint))
+#define ODR_APACKET_PAYLOAD (ODR_FRAME_PAYLOAD - 2 * sizeof(char) * IPADDR_BUFFSIZE - 3 * sizeof(int))
 
 #define ODR_FRAME_RREQ      0
 #define ODR_FRAME_RREP      1
@@ -42,30 +44,30 @@ typedef unsigned short  ushort;
 typedef unsigned int    uint;
 typedef unsigned long   ulong;
 
+// Interface table entry
+// Modified hardware address information
+//   * Ignore interfaces: lo, eth0
 typedef struct hwa_info {
-    char    if_name[IF_NAME];       /* interface name, null terminated */
-    char    if_haddr[IF_HADDR];     /* hardware address */
-    int     if_index;               /* interface index */
+    char    if_name[IF_NAME];       /* interface name, null terminated      */
+    char    if_haddr[IF_HADDR];     /* hardware address                     */
+    int     if_index;               /* interface index                      */
     short   ip_alias;               /* 1 if hwa_addr is an alias IP address */
-    struct  sockaddr  *ip_addr;     /* IP address */
-    struct  hwa_info  *hwa_next;    /* next of these structures */
+    struct  sockaddr  *ip_addr;     /* IP address                           */
+    struct  hwa_info  *hwa_next;    /* next of these structures             */
 } odr_itable;
 
-/* function prototypes */
-odr_itable     *get_hw_addrs(char*);
-odr_itable     *Get_hw_addrs(char*);
-void free_hwa_info(odr_itable *);
-
+// Route table entry
 typedef struct odr_rtable_t {
-    char    dst[IPADDR_BUFFSIZE];
-    char    nexthop[HWADDR_BUFFSIZE];
-    int     index;
-    uint    hopcnt;
-    uint    bcast_id;
-    long    timestamp;
-    struct odr_rtable_t *next;
+    char    dst[IPADDR_BUFFSIZE];       /* destination IP addr  */
+    char    nexthop[HWADDR_BUFFSIZE];   /* next hop MAC address */
+    int     index;                      /* interface index      */
+    uint    hopcnt;                     /* hop count            */
+    uint    bcast_id;                   /* max broadcast id     */
+    long    timestamp;                  /* timestamp of update  */
+    struct odr_rtable_t *next;          /* next entry pointer   */
 } odr_rtable;
 
+// Port table entry
 typedef struct odr_ptable_t {
     int     port;                       /* port number  */
     char    path[PATHNAME_BUFFSIZE];    /* path name    */
@@ -73,16 +75,17 @@ typedef struct odr_ptable_t {
     struct odr_ptable_t *next;          /* next item    */
 } odr_ptable;
 
+// frame structure
 // odr_frame has 124 bytes, plus 4 Frame Check Sequence (CRC) equals 128 bytes
 typedef struct odr_frame_t {
-    uchar   h_dest[ETH_ALEN];   /* destination eth addr */
-    uchar   h_source[ETH_ALEN]; /* source ether addr    */
-    ushort  h_proto;            /* packet type ID field */
-    ushort  h_type;             /* frame type           */
-    char    data[ODR_FRAME_PAYLOAD];
+    uchar   h_dest[ETH_ALEN];           /* destination eth addr */
+    uchar   h_source[ETH_ALEN];         /* source ether addr    */
+    ushort  h_proto;                    /* packet type ID field */
+    ushort  h_type;                     /* frame type           */
+    char    data[ODR_FRAME_PAYLOAD];    /* frame payload        */
 }__attribute__((packed)) odr_frame;
 
-
+// route packet flag structure
 typedef struct odr_rpacket_flag_t {
     BITFIELD8   req : 1; /* RREQ flag */
     BITFIELD8   rep : 1; /* RREP flag */
@@ -94,29 +97,44 @@ typedef struct odr_rpacket_flag_t {
     BITFIELD8   r07 : 1;
 } odr_rpacket_flag;
 
+// route packet structure
+// length: ODR_FRAME_PAYLOAD
 typedef struct odr_rpacket_t {
     char                dst[IPADDR_BUFFSIZE];   /* destination ip addr  */
     char                src[IPADDR_BUFFSIZE];   /* source ip addr       */
     odr_rpacket_flag    flag;                   /* route packet flag    */
     uint                hopcnt;                 /* hop count            */
     uint                bcast_id;               /* broadcast id         */
-    char                unused[59];             /* padding              */
+    char                unused[ODR_RPACKET_PAYLOAD];
 } odr_rpacket;
 
+// application packet structure
+// length: ODR_FRAME_PAYLOAD
 typedef struct odr_apacket_t {
-    char    dst[IPADDR_BUFFSIZE];
-    int     dst_port;
-    char    src[IPADDR_BUFFSIZE];
-    int     src_port;
-    int     length;
-    char    data[56];
+    char    dst[IPADDR_BUFFSIZE];       /* destination IP address   */
+    int     dst_port;                   /* destination port number  */
+    char    src[IPADDR_BUFFSIZE];       /* source IP address        */
+    int     src_port;                   /* source port number       */
+    int     length;                     /* data length              */
+    char    data[ODR_APACKET_PAYLOAD];  /* data payload (app)       */
 } odr_apacket;
 
+// datagram structure
+// exchange between ODR service and application
+typedef struct odr_dgram_t {
+    char    ipaddr[IPADDR_BUFFSIZE];    /* IP address                   */
+    int     port;                       /* port number                  */
+    int     flag;                       /* forced discovery flag        */
+    char    data[ODR_APACKET_PAYLOAD];  /* data field in odr_apacket    */
+} odr_dgram;
+
+// datagram queue entry
 typedef struct odr_queue_t {
-    odr_frame frame;
+    odr_dgram dgram;
     struct odr_queue_t  *next;
 } odr_queue;
 
+// Main ODR information object
 typedef struct odr_object_t {
     unsigned long   staleness;                      /* in seconds           */
     char            ipaddr[IPADDR_BUFFSIZE];        /* IP address           */
