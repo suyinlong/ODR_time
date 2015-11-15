@@ -2,7 +2,14 @@
 * @File: get_hw_addrs.c
 * @Date: 2015-11-11 10:04:27
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-13 20:46:13
+* @Last Modified time: 2015-11-14 20:19:39
+* @Description:
+*     - odr_itable *get_hw_addrs(char *obj_ipaddr)
+*         [Get the hardware address on all interfaces]
+*     + void free_hwa_info(odr_itable *hwahead)
+*         [Free the memory space of odr_itable]
+*     + odr_itable *Get_hw_addrs(char *obj_ipaddr)
+*         [Wrapper function of get_hw_addrs()]
 */
 
 #include "np.h"

@@ -13,8 +13,8 @@ all: ODR_yinlsu server_yinlsu client_yinlsu
 utils.o: utils.c
 	${CC} ${CFLAGS} -c utils.c
 
-ODR_yinlsu: odr.o odr_frame.o utils.o get_hw_addrs.o
-	${CC} ${CFLAGS} -o ODR_yinlsu odr.o odr_frame.o utils.o get_hw_addrs.o ${LIBS}
+ODR_yinlsu: odr.o odr_frame.o odr_handler.o utils.o get_hw_addrs.o
+	${CC} ${CFLAGS} -o ODR_yinlsu odr.o odr_frame.o odr_handler.o utils.o get_hw_addrs.o ${LIBS}
 
 odr.o: odr.c
 	${CC} ${CFLAGS} -c odr.c
@@ -22,17 +22,20 @@ odr.o: odr.c
 odr_frame.o: odr_frame.c
 	${CC} ${CFLAGS} -c odr_frame.c
 
+odr_handler.o: odr_handler.c
+	${CC} ${CFLAGS} -c odr_handler.c
+
 odr_api.o: odr_api.c
 	${CC} ${CFLAGS} -c odr_api.c
 
-server_yinlsu: server.o get_hw_addrs.o odr_api.o
-	${CC} ${CFLAGS} -o server_yinlsu server.o get_hw_addrs.o odr_api.o ${LIBS}
+server_yinlsu: server.o get_hw_addrs.o utils.o odr_api.o
+	${CC} ${CFLAGS} -o server_yinlsu server.o get_hw_addrs.o utils.o odr_api.o ${LIBS}
 
 server.o: server.c
 	${CC} ${CFLAGS} -c server.c
 
-client_yinlsu: client.o get_hw_addrs.o odr_api.o
-	${CC} ${CFLAGS} -o client_yinlsu client.o get_hw_addrs.o odr_api.o ${LIBS}
+client_yinlsu: client.o get_hw_addrs.o utils.o odr_api.o
+	${CC} ${CFLAGS} -o client_yinlsu client.o get_hw_addrs.o utils.o odr_api.o ${LIBS}
 
 client.o: client.c
 	${CC} ${CFLAGS} -c client.c

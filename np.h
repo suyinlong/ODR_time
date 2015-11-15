@@ -14,10 +14,12 @@
 
 #define PROTOCOL_ID         61375
 #define ODR_FRAME_LEN       128
-#define ODR_PATH            "/tmp/timeODR"
+#define ODR_PATH            "/tmp/14508-61375-timeODR"
 
-#define TIMESERV_PATH       "/tmp/timeServer"
+#define TIMESERV_PATH       "/tmp/14508-61375-timeServer"
 #define TIMESERV_PORT       14508
+
+#define TIMECLIE_PATH       "/tmp/14508-61375-timeClient-XXXXXX"
 
 #define IPADDR_BUFFSIZE     20
 #define HWADDR_BUFFSIZE     6
@@ -33,6 +35,8 @@
 #define ODR_FRAME_APPMSG    2
 #define ODR_FRAME_ROUTE     3
 #define ODR_FRAME_DATA      9
+
+#define ODR_DGRAM_DATALEN   ODR_APACKET_PAYLOAD
 
 #define IF_NAME             16
 #define IF_HADDR            6
@@ -125,13 +129,17 @@ typedef struct odr_dgram_t {
     char    ipaddr[IPADDR_BUFFSIZE];    /* IP address                   */
     int     port;                       /* port number                  */
     int     flag;                       /* forced discovery flag        */
-    char    data[ODR_APACKET_PAYLOAD];  /* data field in odr_apacket    */
+    char    data[ODR_DGRAM_DATALEN];    /* data field in odr_apacket    */
 } odr_dgram;
 
-// datagram queue entry
+// odr apacket queue (waiting to send)
+typedef struct odr_queue_item_t {
+    odr_apacket apacket;
+    struct odr_queue_item_t *next;
+} odr_queue_item;
 typedef struct odr_queue_t {
-    odr_dgram dgram;
-    struct odr_queue_t  *next;
+    odr_queue_item *head;
+    odr_queue_item *tail;
 } odr_queue;
 
 // Main ODR information object
@@ -142,12 +150,15 @@ typedef struct odr_object_t {
     odr_itable      *itable;                        /* Hardware information */
     odr_rtable      *rtable;                        /* routing table        */
     odr_ptable      *ptable;                        /* port and path table  */
-    odr_queue       *queue;                         /* ODR message queue    */
+    odr_queue       queue;                          /* ODR message queue    */
     int             d_sockfd;                       /* Domain socket        */
     int             p_sockfd;                       /* PF_PACKET socket     */
     uint            bcast_id;                       /* Broadcast ID         */
+    int             free_port;                      /* free port number     */
 } odr_object;
 
-void util_ip_to_hostname(const char *, char *);
+odr_itable *get_hw_addrs(char *);
+odr_itable *Get_hw_addrs(char *);
+void free_hwa_info(odr_itable *);
 
 #endif

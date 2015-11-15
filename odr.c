@@ -2,60 +2,75 @@
 * @File: odr.c
 * @Date: 2015-11-08 20:56:07
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-13 19:51:26
+* @Last Modified time: 2015-11-14 20:24:50
+* @Description:
+*     ODR main program, provides maintenance features of odr_object
+*     - int get_port_ptable(const char *path, odr_object *obj)
+*         [ODR ptable path-port finder]
+*     - void process_frame(odr_object *obj)
+*         [ODR PF_PACKET socket frame processor]
+*     - void process_domain_dgram(odr_object *obj)
+*         [ODR Domain socket datagram processor]
+*     - odr_ptable *create_ptable()
+*         [odr_ptable constructor]
+*     - void create_sockets(odr_object *obj)
+*         [PF_PACKET socket and domain socket constructor]
+*     - void process_sockets(odr_object *obj)
+*         [ODR Sockets processor]
+*     - void free_odr_object(odr_object *obj)
+*         [odr_object destructor]
+*     + int main(int argc, char **argv)
+*         [ODR service entry function]
 */
 
 #include "np.h"
 
 /* --------------------------------------------------------------------------
- *  debug_route
+ *  get_port_ptable
  *
- *  Debug function to print route table
+ *  Ptable path-port finder
  *
- *  @param  : odr_object    *obj    [odr object]
- *  @return : void
+ *  @param  : const char            *path   [pathname]
+ *            odr_object            *obj    [odr object]
+ *  @return : int                   [port number]
  *
- *  Print all content in route table
+ *  Find the port number to the path in path-port table
+ *  If the path is in table, update the timestamp
+ *  Otherwise, add the path-port entry to the table
  * --------------------------------------------------------------------------
  */
-void debug_route(odr_object *obj) {
-    // print out all route items
-    int i;
-    odr_rtable *r = obj->rtable;
+int get_port_ptable(const char *path, odr_object *obj) {
+    odr_ptable *item = obj->ptable, *newitem;
 
-    while (r) {
-        printf("| %-*s | ", IPADDR_BUFFSIZE, r->dst);
-        for (i = 0; i < 5; i++)
-            printf("%.2x:", r->nexthop[i] & 0xff);
-        printf("%.2x | ", r->nexthop[i] & 0xff);
-        printf("%2d | ", r->index);
-        printf("%2d | ", r->hopcnt);
-        printf("%4d | ", r->bcast_id);
-        printf("\n");
-        r = r->next;
+    // find the path in table
+    while (item) {
+        if (strcmp(item->path, path) == 0)
+            break;
+        item = item->next;
     }
-}
 
-/* --------------------------------------------------------------------------
- *  debug_data
- *
- *  Debug function to print pure text
- *
- *  @param  : odr_frame             *frame  [frame]
- *            struct sockaddr_ll    *from   [sender address structure]
- *            socklen_t             fromlen [sender address structure length]
- *  @return : void
- *
- *  Print pure text
- * --------------------------------------------------------------------------
- */
-void debug_data(odr_frame *frame, struct sockaddr_ll *from, socklen_t fromlen) {
-    int i;
+    if (item) {
+        // if found, update timestamp and return port number
+        if (item->timestamp > 0)
+            item->timestamp = time(NULL);
+        printf("[ptable] Path: %s, Port: %d, Timestamp: %ld\n", item->path, item->port, item->timestamp);
+        return item->port;
+    } else {
+        // otherwise, create new one then plug in
+        newitem = (odr_ptable *)Calloc(1, sizeof(odr_ptable));
 
-    printf("Interface index: %d, MAC address: ", from->sll_ifindex);
-    for (i = 0; i < 6; i++)
-        printf("%.2x%s", from->sll_addr[i] & 0xff, ((i == 5) ? " " : ":"));
-    printf("Data: %s\n", frame->data);
+        if (obj->free_port == 0xffff)
+            obj->free_port = TIMESERV_PORT;
+
+        newitem->port = ++obj->free_port;
+        strcpy(newitem->path, path);
+        newitem->timestamp = time(NULL);
+        newitem->next = obj->ptable->next;
+
+        obj->ptable->next = newitem;
+        printf("[ptable] New Path: %s, Port: %d, Timestamp: %ld\n", newitem->path, newitem->port, newitem->timestamp);
+        return newitem->port;
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -83,16 +98,19 @@ void process_frame(odr_object *obj) {
 
     switch (frame.h_type) {
     case ODR_FRAME_RREQ:
+        frame_rreq_handler(obj, &frame, &from);
         break;
     case ODR_FRAME_RREP:
+        frame_rrep_handler(obj, &frame, &from);
         break;
     case ODR_FRAME_APPMSG:
+        frame_appmsg_handler(obj, &frame, &from);
         break;
     case ODR_FRAME_ROUTE:
-        debug_route(obj);
+        debug_route_handler(obj);
         break;
     case ODR_FRAME_DATA:
-        debug_data(&frame, &from, fromlen);
+        debug_data_handler(&frame, &from, fromlen);
     }
 
 }
@@ -109,15 +127,46 @@ void process_frame(odr_object *obj) {
  *  handle server/client request
  * --------------------------------------------------------------------------
  */
-void process_domain_dgram(int sockfd) {
-    int n;
-    char buff[255];
-    struct sockaddr from;
-    socklen_t addrlen;
+void process_domain_dgram(odr_object *obj) {
+    int n, port;
+    odr_dgram dgram;
+    struct sockaddr_un from;
+    socklen_t addrlen = sizeof(from);
 
-    n = Recvfrom(sockfd, buff, 255, 0, &from, &addrlen);
-    printf("Received from [%s]: %s\n", ((struct sockaddr_un *)&from)->sun_path, buff);
+    bzero(&dgram, sizeof(dgram));
+    n = Recvfrom(obj->d_sockfd, &dgram, sizeof(dgram), 0, (SA *)&from, &addrlen);
+    printf("Received from [%s]: %s\n", from.sun_path, dgram.data);
 
+    port = get_port_ptable(from.sun_path, obj);
+
+    // build apacket item
+    odr_queue_item *item = (odr_queue_item *)Calloc(1, sizeof(odr_queue_item));
+
+    strcpy(item->apacket.dst, dgram.ipaddr);
+    item->apacket.dst_port = dgram.port;
+    strcpy(item->apacket.src, obj->ipaddr);
+    item->apacket.src_port = port;
+    item->apacket.length = strlen(dgram.data);
+    strcpy(item->apacket.data, dgram.data);
+
+    item->next = NULL;
+
+    // insert into queue
+    if (obj->queue.head == NULL) {
+        obj->queue.head = item;
+        obj->queue.tail = item;
+    } else {
+        obj->queue.tail->next = item;
+        obj->queue.tail = item;
+    }
+    printf("Queued up app_packet [DST: %s:%d SRC: %s:%d DATA(%d): %s]\n", item->apacket.dst, item->apacket.dst_port, item->apacket.src, item->apacket.src_port, item->apacket.length, item->apacket.data);
+
+    // queue_handler(obj);
+
+    // for testing, send back
+    dgram.data[0] = 'T';
+    sendto(obj->d_sockfd, &dgram, sizeof(dgram), 0, (SA *)&from, addrlen);
+    printf("Send back.\n");
 }
 
 /* --------------------------------------------------------------------------
@@ -205,7 +254,7 @@ void process_sockets(odr_object *obj) {
 
         if (FD_ISSET(obj->d_sockfd, &rset)) {
             // from Domain Socket
-            process_domain_dgram(obj->d_sockfd);
+            process_domain_dgram(obj);
         }
     }
 }
@@ -224,6 +273,7 @@ void process_sockets(odr_object *obj) {
 void free_odr_object(odr_object *obj) {
     odr_rtable *r, *rnext;
     odr_ptable *p, *pnext;
+    odr_queue_item *q, *qnext;
 
     free_hwa_info(obj->itable);
 
@@ -241,8 +291,12 @@ void free_odr_object(odr_object *obj) {
         p = pnext;
     }
 
-    // free queue
-
+    q = obj->queue.head;
+    while (q) {
+        qnext = q->next;
+        free(q);
+        q = qnext;
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -273,12 +327,16 @@ int main(int argc, char **argv) {
     bzero(&obj, sizeof(odr_object));
     obj.staleness = atol(argv[1]);
     obj.bcast_id = 0;
+    obj.free_port = TIMESERV_PORT;
 
     // Get interface information and canonical IP address / hostname
     obj.itable = Get_hw_addrs(obj.ipaddr);
     obj.rtable = NULL;
     obj.ptable = create_ptable();
     util_ip_to_hostname(obj.ipaddr, obj.hostname);
+
+    obj.queue.head = NULL;
+    obj.queue.tail = NULL;
 
     create_sockets(&obj);
 

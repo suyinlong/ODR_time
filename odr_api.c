@@ -2,7 +2,14 @@
 * @File: odr_api.c
 * @Date: 2015-11-13 00:15:31
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-13 21:35:20
+* @Last Modified time: 2015-11-14 20:26:41
+* @Description:
+*     ODR API, provides domain socketdatagram communication between ODR
+*     service and client/server
+*     + int msg_send(int sockfd, char *dst, int port, char *data, int flag)
+*         [ODR API message send function]
+*     + int msg_recv(int sockfd, char *data, char *src, int *port)
+*         [ODR API message receive function]
 */
 
 #include "np.h"
@@ -54,10 +61,21 @@ int msg_send(int sockfd, char *dst, int port, char *data, int flag) {
  * --------------------------------------------------------------------------
  */
 int msg_recv(int sockfd, char *data, char *src, int *port) {
-    odr_dgram dgram;
-    bzero(&dgram, sizeof(dgram));
+    int             r;
+    fd_set          rset;
+    odr_dgram       dgram;
+    struct timeval  timeout;
 
-    int r = recvfrom(sockfd, &dgram, sizeof(dgram), 0, NULL, NULL);
+    FD_ZERO(&rset);
+    FD_SET(sockfd, &rset);
+    bzero(&dgram, sizeof(dgram));
+    timeout.tv_sec  = 5;
+    timeout.tv_usec = 0;
+
+    r = Select(sockfd + 1, &rset, NULL, NULL, &timeout);
+
+    if (r > 0)
+        r = Recvfrom(sockfd, &dgram, sizeof(dgram), 0, NULL, NULL);
 
     strcpy(data, dgram.data);
     strcpy(src, dgram.ipaddr);

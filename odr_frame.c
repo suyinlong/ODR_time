@@ -2,7 +2,19 @@
 * @File: odr_frame.c
 * @Date: 2015-11-10 22:45:45
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-13 20:02:49
+* @Last Modified time: 2015-11-14 20:30:13
+* @Description:
+*     ODR frame functions, provides frame builder and frame send/recv function
+*     - void build_frame_header(odr_frame *frame, uchar *dst_mac, uchar *src_mac, ushort ftype)
+*         [Frame header builder]
+*     + void build_frame(odr_frame *frame, uchar *dst_mac, uchar *src_mac, ushort ftype, void *data)
+*         [Frame builder]
+*     + void build_bcast_frame(odr_frame *frame, uchar *src_mac, ushort ftype, void *data)
+*         [Broadcast frame builder]
+*     + int send_frame(int sockfd, int if_index, odr_frame *frame, uchar pkttype)
+*         [Frame send function]
+*     + int recv_frame(int sockfd, odr_frame *frame, struct sockaddr *from, socklen_t *fromlen)
+*         [Frame receive function]
 */
 
 #include "np.h"
