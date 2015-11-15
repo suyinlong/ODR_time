@@ -2,9 +2,13 @@
 * @File: odr.c
 * @Date: 2015-11-08 20:56:07
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-14 20:24:50
+* @Last Modified time: 2015-11-15 00:18:14
 * @Description:
 *     ODR main program, provides maintenance features of odr_object
+*     + odr_itable *get_item_itable(int index, odr_object *obj)
+*         [ODR itable index finder]
+*     + odr_rtable *get_item_rtable(const char *ipaddr, odr_object *obj)
+*         [ODR rtable routing path finder]
 *     - int get_port_ptable(const char *path, odr_object *obj)
 *         [ODR ptable path-port finder]
 *     - void process_frame(odr_object *obj)
@@ -24,6 +28,57 @@
 */
 
 #include "np.h"
+
+/* --------------------------------------------------------------------------
+ *  get_item_itable
+ *
+ *  Itable index finder
+ *
+ *  @param  : int                   index   [Interface index]
+ *            odr_object            *obj    [odr object]
+ *  @return : odr_itable *          [interface entry]
+ *
+ *  Find the interface information of given index
+ * --------------------------------------------------------------------------
+ */
+odr_itable *get_item_itable(int index, odr_object *obj) {
+    odr_itable *item = obj->itable;
+
+    // find the item in itable
+    while (item) {
+        if (item->if_index == index)
+            break;
+        item = item->hwa_next;
+    }
+
+    return item;
+}
+
+/* --------------------------------------------------------------------------
+ *  get_item_rtable
+ *
+ *  Rtable routing path finder
+ *
+ *  @param  : const char            *ipaddr [Destination IP address]
+ *            odr_object            *obj    [odr object]
+ *  @return : odr_rtable *          [routing path entry]
+ *
+ *  Find the routing path entry of the destination IP address
+ *  return NULL if destination is currently unreachable
+ * --------------------------------------------------------------------------
+ */
+odr_rtable *get_item_rtable(const char *ipaddr, odr_object *obj) {
+    odr_rtable *item = obj->rtable;
+
+    // find the item in rtable
+    while (item) {
+        if (strcmp(item->dst, ipaddr) == 0)
+            break;
+        item = item->next;
+    }
+
+    return item;
+}
 
 /* --------------------------------------------------------------------------
  *  get_port_ptable
@@ -147,8 +202,10 @@ void process_domain_dgram(odr_object *obj) {
     strcpy(item->apacket.src, obj->ipaddr);
     item->apacket.src_port = port;
     item->apacket.length = strlen(dgram.data);
+    item->apacket.hopcnt = 0;
     strcpy(item->apacket.data, dgram.data);
 
+    item->flag = dgram.flag;
     item->next = NULL;
 
     // insert into queue
@@ -159,7 +216,7 @@ void process_domain_dgram(odr_object *obj) {
         obj->queue.tail->next = item;
         obj->queue.tail = item;
     }
-    printf("Queued up app_packet [DST: %s:%d SRC: %s:%d DATA(%d): %s]\n", item->apacket.dst, item->apacket.dst_port, item->apacket.src, item->apacket.src_port, item->apacket.length, item->apacket.data);
+    printf("Queued up app_packet [DST: %s:%d SRC: %s:%d HOPCNT: %d DATA(%d): %s]\n", item->apacket.dst, item->apacket.dst_port, item->apacket.src, item->apacket.src_port, item->apacket.hopcnt, item->apacket.length, item->apacket.data);
 
     // queue_handler(obj);
 

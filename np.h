@@ -28,7 +28,7 @@
 
 #define ODR_FRAME_PAYLOAD   (124 - 2 * sizeof(uchar) * ETH_ALEN - 2 * sizeof(ushort))
 #define ODR_RPACKET_PAYLOAD (ODR_FRAME_PAYLOAD - 2 * sizeof(char) * IPADDR_BUFFSIZE - sizeof(odr_rpacket_flag) - 2 * sizeof(uint))
-#define ODR_APACKET_PAYLOAD (ODR_FRAME_PAYLOAD - 2 * sizeof(char) * IPADDR_BUFFSIZE - 3 * sizeof(int))
+#define ODR_APACKET_PAYLOAD (ODR_FRAME_PAYLOAD - 2 * sizeof(char) * IPADDR_BUFFSIZE - 4 * sizeof(int))
 
 #define ODR_FRAME_RREQ      0
 #define ODR_FRAME_RREP      1
@@ -120,6 +120,7 @@ typedef struct odr_apacket_t {
     char    src[IPADDR_BUFFSIZE];       /* source IP address        */
     int     src_port;                   /* source port number       */
     int     length;                     /* data length              */
+    uint    hopcnt;                     /* hop count                */
     char    data[ODR_APACKET_PAYLOAD];  /* data payload (app)       */
 } odr_apacket;
 
@@ -134,7 +135,8 @@ typedef struct odr_dgram_t {
 
 // odr apacket queue (waiting to send)
 typedef struct odr_queue_item_t {
-    odr_apacket apacket;
+    odr_apacket apacket;    /* apacket content          */
+    int         flag;       /* forced discovery flag    */
     struct odr_queue_item_t *next;
 } odr_queue_item;
 typedef struct odr_queue_t {
@@ -160,5 +162,8 @@ typedef struct odr_object_t {
 odr_itable *get_hw_addrs(char *);
 odr_itable *Get_hw_addrs(char *);
 void free_hwa_info(odr_itable *);
+
+odr_itable *get_item_itable(int, odr_object *);
+odr_rtable *get_item_rtable(const char *, odr_object *);
 
 #endif
