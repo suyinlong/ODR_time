@@ -2,7 +2,7 @@
 * @File: odr.c
 * @Date: 2015-11-08 20:56:07
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-15 21:57:07
+* @Last Modified time: 2015-11-16 16:38:39
 * @Description:
 *     ODR main program, provides maintenance features of odr_object
 *     + odr_itable *get_item_itable(int index, odr_object *obj)
@@ -256,17 +256,19 @@ void process_domain_dgram(odr_object *obj) {
     port = get_port_ptable(from.sun_path, obj);
 
     // build apacket item
-    odr_queue_item *item = (odr_queue_item *)Calloc(1, sizeof(odr_queue_item));
+    odr_queue_item  *item = (odr_queue_item *)Calloc(1, sizeof(odr_queue_item));
+    odr_apacket     *apacket = (odr_apacket *)item->data;
 
-    strcpy(item->apacket.dst, dgram.ipaddr);
-    item->apacket.dst_port = dgram.port;
-    strcpy(item->apacket.src, obj->ipaddr);
-    item->apacket.src_port = port;
-    item->apacket.length = strlen(dgram.data);
-    item->apacket.hopcnt = 0;
-    strcpy(item->apacket.data, dgram.data);
+    strcpy(apacket->dst, dgram.ipaddr);
+    apacket->dst_port = dgram.port;
+    strcpy(apacket->src, obj->ipaddr);
+    apacket->src_port = port;
+    apacket->hopcnt = 0;
+    apacket->frd = dgram.flag;
+    apacket->length = strlen(dgram.data);
+    strcpy(apacket->data, dgram.data);
 
-    item->flag = dgram.flag;
+    item->type = ODR_FRAME_APPMSG;
     item->next = NULL;
 
     // insert into queue
@@ -277,7 +279,7 @@ void process_domain_dgram(odr_object *obj) {
         obj->queue.tail->next = item;
         obj->queue.tail = item;
     }
-    printf("Queued up app_packet [DST: %s:%d SRC: %s:%d HOPCNT: %d DATA(%d): %s]\n", item->apacket.dst, item->apacket.dst_port, item->apacket.src, item->apacket.src_port, item->apacket.hopcnt, item->apacket.length, item->apacket.data);
+    printf("Queued up app_packet [DST: %s:%d SRC: %s:%d HOPCNT: %d FRD:%d DATA(%d): %s]\n", apacket->dst, apacket->dst_port, apacket->src, apacket->src_port, apacket->hopcnt, apacket->frd, apacket->length, apacket->data);
 
     // queue_handler(obj);
 

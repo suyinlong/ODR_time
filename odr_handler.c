@@ -2,7 +2,7 @@
 * @File: odr_handler.c
 * @Date: 2015-11-14 19:51:16
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-15 15:43:15
+* @Last Modified time: 2015-11-16 16:51:43
 * @Description:
 *     ODR frame and queued packet handler
 *     - void send_rreq(odr_object *obj, char *dst, char *src, uint hopcnt, uint bcast_id, int frdflag, int resflag)
@@ -106,15 +106,17 @@ void send_rrep(odr_object *obj, char *dst, char *src, uint hopcnt, int frdflag) 
  *  @param  : odr_object    *obj    [odr object]
  *  @return : void
  *
- *  For the apacket in queue, find the destination routing path in rtable
+ *  For the APPMSG/RREP in queue, find the destination routing path in rtable
  *  - If the destination is currently unreachable, send RREQ
  *  - If the forced discovery flag is set, send RREQ with flag.frd
  *  - Otherwise, send the frame via routing interface
  * --------------------------------------------------------------------------
  */
 void queue_handler(odr_object *obj) {
+    int freeflag = 0;
     odr_rtable *route;
     odr_itable *interface;
+    odr_rpacket *rpacket;
     odr_apacket *apacket;
     odr_frame frame;
 
@@ -122,21 +124,42 @@ void queue_handler(odr_object *obj) {
     if (obj->queue.head == NULL)
         return;
 
-    apacket = &(obj->queue.head->apacket);
-    route = get_item_rtable(apacket->dst, obj);
+    if (obj->queue.head->type == ODR_FRAME_APPMSG) {
+        apacket = (odr_apacket *)obj->queue.head->data;
+        route = get_item_rtable(apacket->dst, obj);
 
-    if (route == NULL || obj->queue.head->flag == 1) {
-        // destination is currently unreachable, send RREQ
-        // or forced discovery, send rreq with flag.frd = 1
-        send_rreq(obj, apacket->dst, obj->ipaddr, 0, ++obj->bcast_id, obj->queue.head->flag, 0);
-    } else {
-        // found entry in rtable, send apacket via interface
-        interface = get_item_itable(route->index, obj);
+        if (route == NULL || apacket->frd == 1) {
+            // destination is currently unreachable, send RREQ
+            // or forced discovery, send rreq with flag.frd = 1
+            send_rreq(obj, apacket->dst, obj->ipaddr, 0, ++obj->bcast_id, apacket->frd, 0);
+        } else {
+            // found entry in rtable, send apacket via interface
+            interface = get_item_itable(route->index, obj);
 
-        bzero(&frame, sizeof(frame));
-        build_frame(&frame, route->nexthop, interface->if_haddr, ODR_FRAME_APPMSG, apacket);
-        send_frame(obj->p_sockfd, route->index, &frame, PACKET_OTHERHOST);
+            bzero(&frame, sizeof(frame));
+            build_frame(&frame, route->nexthop, interface->if_haddr, ODR_FRAME_APPMSG, apacket);
+            send_frame(obj->p_sockfd, route->index, &frame, PACKET_OTHERHOST);
 
+            freeflag = 1;
+        }
+    } else if (obj->queue.head->type == ODR_FRAME_RREP) {
+        rpacket = (odr_rpacket *)obj->queue.head->data;
+        route = get_item_rtable(rpacket->dst, obj); // TODO: Is it dst or src?
+
+        if (route == NULL) {
+            send_rreq(obj, rpacket->dst, obj->ipaddr, 0, ++obj->bcast_id, 0, 0);
+        } else {
+            interface = get_item_itable(route->index, obj);
+
+            bzero(&frame, sizeof(frame));
+            build_frame(&frame, route->nexthop, interface->if_haddr, ODR_FRAME_RREP, rpacket);
+            send_frame(obj->p_sockfd, route->index, &frame, PACKET_OTHERHOST);
+
+            freeflag = 1;
+        }
+    }
+
+    if (freeflag) {
         // free the head of queue
         if (obj->queue.head == obj->queue.tail) {
             free(obj->queue.head);
@@ -152,6 +175,7 @@ void queue_handler(odr_object *obj) {
         if (obj->queue.head)
             queue_handler(obj);
     }
+
 }
 
 void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
