@@ -16,6 +16,8 @@
 #define ODR_FRAME_LEN       128
 #define ODR_PATH            "/tmp/14508-61375-timeODR"
 
+#define ODR_TIMETOLIVE      180
+
 #define TIMESERV_PATH       "/tmp/14508-61375-timeServer"
 #define TIMESERV_PORT       14508
 

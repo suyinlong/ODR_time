@@ -2,7 +2,7 @@
 * @File: odr.c
 * @Date: 2015-11-08 20:56:07
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-15 00:18:14
+* @Last Modified time: 2015-11-15 21:57:07
 * @Description:
 *     ODR main program, provides maintenance features of odr_object
 *     + odr_itable *get_item_itable(int index, odr_object *obj)
@@ -11,6 +11,8 @@
 *         [ODR rtable routing path finder]
 *     - int get_port_ptable(const char *path, odr_object *obj)
 *         [ODR ptable path-port finder]
+*     - void purge_tables(odr_object *obj)
+*         [ODR service tables purge function]
 *     - void process_frame(odr_object *obj)
 *         [ODR PF_PACKET socket frame processor]
 *     - void process_domain_dgram(odr_object *obj)
@@ -126,6 +128,65 @@ int get_port_ptable(const char *path, odr_object *obj) {
         printf("[ptable] New Path: %s, Port: %d, Timestamp: %ld\n", newitem->path, newitem->port, newitem->timestamp);
         return newitem->port;
     }
+}
+
+/* --------------------------------------------------------------------------
+ *  purge_tables
+ *
+ *  ODR service tables purge function
+ *
+ *  @param  : odr_object    *obj    [odr object]
+ *  @return : void
+ *
+ *  Purge the entries in rtable that have gone stale
+ *  Purge the entries in ptable that have no communication longer than
+ *  ODR_TIMETOLIVE
+ * --------------------------------------------------------------------------
+ */
+void purge_tables(odr_object *obj) {
+    odr_rtable *rtable, *rp;
+    odr_ptable *ptable, *pp;
+    ulong t = time(NULL);
+
+    // remove the route that has been stale
+    rp = obj->rtable;
+    rtable = obj->rtable;
+    while (rtable) {
+        if (rtable->timestamp + obj->staleness > t) {
+            // remove the routing path
+            if (rtable == obj->rtable) {
+                // remove head
+                obj->rtable = rtable->next;
+                free(rtable);
+                rtable = obj->rtable;
+                rp = obj->rtable;
+            } else {
+                // remove not head
+                rp->next = rtable->next;
+                free(rtable);
+                rtable = rp->next;
+            }
+        } else {
+            rp = rtable;
+            rtable = rtable->next;
+        }
+    }
+
+    // remove the path-port that has been timeout
+    pp = obj->ptable;
+    ptable = obj->ptable;
+    while (ptable) {
+        if (ptable->timestamp != 0 && ptable->timestamp + ODR_TIMETOLIVE > t) {
+            // remove not head
+            pp->next = ptable->next;
+            free(ptable);
+            ptable = pp->next;
+        } else {
+            pp = ptable;
+            ptable = ptable->next;
+        }
+    }
+
 }
 
 /* --------------------------------------------------------------------------
@@ -303,6 +364,8 @@ void process_sockets(odr_object *obj) {
         FD_SET(obj->d_sockfd, &rset);
 
         r = Select(maxfdp1, &rset, NULL, NULL, NULL);
+
+        purge_tables(obj);
 
         if (FD_ISSET(obj->p_sockfd, &rset)) {
             // from PF_PACKET Socket
