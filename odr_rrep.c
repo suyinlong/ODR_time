@@ -47,7 +47,7 @@ int InsertRoutingTable(odr_rtable *table, const odr_frame *frame, const char *fr
     idx = GetRouteIndex(table, rpkt->src);
     if (idx == -1)
     {
-        printf("[ODR-RREP]: Get interface index error, %s\n");
+        printf("[ODR-RREP]: Get interface index error, src=%s\n", rpkt->src);
         return -1;
     }
 
