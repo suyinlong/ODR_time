@@ -96,6 +96,9 @@ void process_frame(odr_object *obj) {
 
     len = recv_frame(obj->p_sockfd, &frame, (SA *)&from, &fromlen);
 
+    if (frame.h_proto != PROTOCOL_ID)
+        return;
+
     switch (frame.h_type) {
     case ODR_FRAME_RREQ:
         frame_rreq_handler(obj, &frame, &from);

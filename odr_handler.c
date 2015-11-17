@@ -9,6 +9,7 @@
 */
 
 #include "np.h"
+#include "odr_rrep.h"
 
 void queue_handler(odr_object *obj) {
 
@@ -19,7 +20,7 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
 }
 
 void frame_rrep_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
-
+    HandleRREP(obj, frame, from);
 }
 
 void frame_appmsg_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
