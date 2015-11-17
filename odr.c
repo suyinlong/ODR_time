@@ -2,11 +2,17 @@
 * @File: odr.c
 * @Date: 2015-11-08 20:56:07
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-14 20:24:50
+* @Last Modified time: 2015-11-16 16:38:39
 * @Description:
 *     ODR main program, provides maintenance features of odr_object
+*     + odr_itable *get_item_itable(int index, odr_object *obj)
+*         [ODR itable index finder]
+*     + odr_rtable *get_item_rtable(const char *ipaddr, odr_object *obj)
+*         [ODR rtable routing path finder]
 *     - int get_port_ptable(const char *path, odr_object *obj)
 *         [ODR ptable path-port finder]
+*     - void purge_tables(odr_object *obj)
+*         [ODR service tables purge function]
 *     - void process_frame(odr_object *obj)
 *         [ODR PF_PACKET socket frame processor]
 *     - void process_domain_dgram(odr_object *obj)
@@ -24,6 +30,57 @@
 */
 
 #include "np.h"
+
+/* --------------------------------------------------------------------------
+ *  get_item_itable
+ *
+ *  Itable index finder
+ *
+ *  @param  : int                   index   [Interface index]
+ *            odr_object            *obj    [odr object]
+ *  @return : odr_itable *          [interface entry]
+ *
+ *  Find the interface information of given index
+ * --------------------------------------------------------------------------
+ */
+odr_itable *get_item_itable(int index, odr_object *obj) {
+    odr_itable *item = obj->itable;
+
+    // find the item in itable
+    while (item) {
+        if (item->if_index == index)
+            break;
+        item = item->hwa_next;
+    }
+
+    return item;
+}
+
+/* --------------------------------------------------------------------------
+ *  get_item_rtable
+ *
+ *  Rtable routing path finder
+ *
+ *  @param  : const char            *ipaddr [Destination IP address]
+ *            odr_object            *obj    [odr object]
+ *  @return : odr_rtable *          [routing path entry]
+ *
+ *  Find the routing path entry of the destination IP address
+ *  return NULL if destination is currently unreachable
+ * --------------------------------------------------------------------------
+ */
+odr_rtable *get_item_rtable(const char *ipaddr, odr_object *obj) {
+    odr_rtable *item = obj->rtable;
+
+    // find the item in rtable
+    while (item) {
+        if (strcmp(item->dst, ipaddr) == 0)
+            break;
+        item = item->next;
+    }
+
+    return item;
+}
 
 /* --------------------------------------------------------------------------
  *  get_port_ptable
@@ -71,6 +128,65 @@ int get_port_ptable(const char *path, odr_object *obj) {
         printf("[ptable] New Path: %s, Port: %d, Timestamp: %ld\n", newitem->path, newitem->port, newitem->timestamp);
         return newitem->port;
     }
+}
+
+/* --------------------------------------------------------------------------
+ *  purge_tables
+ *
+ *  ODR service tables purge function
+ *
+ *  @param  : odr_object    *obj    [odr object]
+ *  @return : void
+ *
+ *  Purge the entries in rtable that have gone stale
+ *  Purge the entries in ptable that have no communication longer than
+ *  ODR_TIMETOLIVE
+ * --------------------------------------------------------------------------
+ */
+void purge_tables(odr_object *obj) {
+    odr_rtable *rtable, *rp;
+    odr_ptable *ptable, *pp;
+    ulong t = time(NULL);
+
+    // remove the route that has been stale
+    rp = obj->rtable;
+    rtable = obj->rtable;
+    while (rtable) {
+        if (rtable->timestamp + obj->staleness > t) {
+            // remove the routing path
+            if (rtable == obj->rtable) {
+                // remove head
+                obj->rtable = rtable->next;
+                free(rtable);
+                rtable = obj->rtable;
+                rp = obj->rtable;
+            } else {
+                // remove not head
+                rp->next = rtable->next;
+                free(rtable);
+                rtable = rp->next;
+            }
+        } else {
+            rp = rtable;
+            rtable = rtable->next;
+        }
+    }
+
+    // remove the path-port that has been timeout
+    pp = obj->ptable;
+    ptable = obj->ptable;
+    while (ptable) {
+        if (ptable->timestamp != 0 && ptable->timestamp + ODR_TIMETOLIVE > t) {
+            // remove not head
+            pp->next = ptable->next;
+            free(ptable);
+            ptable = pp->next;
+        } else {
+            pp = ptable;
+            ptable = ptable->next;
+        }
+    }
+
 }
 
 /* --------------------------------------------------------------------------
@@ -143,15 +259,19 @@ void process_domain_dgram(odr_object *obj) {
     port = get_port_ptable(from.sun_path, obj);
 
     // build apacket item
-    odr_queue_item *item = (odr_queue_item *)Calloc(1, sizeof(odr_queue_item));
+    odr_queue_item  *item = (odr_queue_item *)Calloc(1, sizeof(odr_queue_item));
+    odr_apacket     *apacket = (odr_apacket *)item->data;
 
-    strcpy(item->apacket.dst, dgram.ipaddr);
-    item->apacket.dst_port = dgram.port;
-    strcpy(item->apacket.src, obj->ipaddr);
-    item->apacket.src_port = port;
-    item->apacket.length = strlen(dgram.data);
-    strcpy(item->apacket.data, dgram.data);
+    strcpy(apacket->dst, dgram.ipaddr);
+    apacket->dst_port = dgram.port;
+    strcpy(apacket->src, obj->ipaddr);
+    apacket->src_port = port;
+    apacket->hopcnt = 0;
+    apacket->frd = dgram.flag;
+    apacket->length = strlen(dgram.data);
+    strcpy(apacket->data, dgram.data);
 
+    item->type = ODR_FRAME_APPMSG;
     item->next = NULL;
 
     // insert into queue
@@ -162,7 +282,7 @@ void process_domain_dgram(odr_object *obj) {
         obj->queue.tail->next = item;
         obj->queue.tail = item;
     }
-    printf("Queued up app_packet [DST: %s:%d SRC: %s:%d DATA(%d): %s]\n", item->apacket.dst, item->apacket.dst_port, item->apacket.src, item->apacket.src_port, item->apacket.length, item->apacket.data);
+    printf("Queued up app_packet [DST: %s:%d SRC: %s:%d HOPCNT: %d FRD:%d DATA(%d): %s]\n", apacket->dst, apacket->dst_port, apacket->src, apacket->src_port, apacket->hopcnt, apacket->frd, apacket->length, apacket->data);
 
     // queue_handler(obj);
 
@@ -249,6 +369,8 @@ void process_sockets(odr_object *obj) {
         FD_SET(obj->d_sockfd, &rset);
 
         r = Select(maxfdp1, &rset, NULL, NULL, NULL);
+
+        purge_tables(obj);
 
         if (FD_ISSET(obj->p_sockfd, &rset)) {
             // from PF_PACKET Socket
