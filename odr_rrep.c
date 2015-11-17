@@ -20,7 +20,7 @@ int VerifyITable(const odr_itable *table, const char *addr)
     return -1;
 }
 
-odr_rtable *GetRouteItem(const odr_rtable *table, const char *dstIpAddr)
+/*odr_rtable *GetRouteItem(const odr_rtable *table, const char *dstIpAddr)
 {
     odr_rtable *it = (odr_rtable *)table;
     for (; it != NULL; it = it->next)
@@ -41,7 +41,7 @@ int GetRouteIndex(const odr_rtable *table, const char *srcIpAddr)
 
 int InsertRoutingTable(odr_rtable *table, const odr_frame *frame, const char *fromAddr)
 {
-    int idx = 0;    
+    int idx = 0;
     odr_rpacket *rpkt = (odr_rpacket *)frame->data;
     // get the interface index from 'reverse' routing table
     idx = GetRouteIndex(table, rpkt->src);
@@ -76,23 +76,49 @@ void UpdateRoutingTable(odr_rtable *item, const odr_frame *frame, const char *fr
     item->hopcnt = rpkt->hopcnt;
     item->timestamp = time(NULL);
 }
+*/
 
-int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) 
+void InsertOrUpdateRoutingTable(odr_object *obj, odr_rtable *item, char *dst, char *nexthop, int index, uint hopcnt, uint bcast_id) {
+    if (item == NULL) {
+        // insert a new route
+        item = (odr_rtable *)Calloc(1, sizeof(odr_rtable));
+        item->next = obj->rtable;
+        obj->rtable = item;
+    }
+
+    // modify the route
+    memcpy(item->dst, dst, IPADDR_BUFFSIZE);
+    memcpy(item->nexthop, nexthop, HWADDR_BUFFSIZE);
+    item->index = index;
+    item->hopcnt = hopcnt;
+    item->bcast_id = bcast_id;
+    item->timestamp = time(NULL);
+}
+
+
+int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
 {
     int idx = 0;
     bool needReply = false;
      // verify whether a node is source from hardware interface table
-    VerifyITable(obj->itable, frame->h_dest);
-    
-    // get sender hardware address
-    char fromHwAddr[HWADDR_BUFFSIZE];
-    memcpy(&fromHwAddr, from->sll_addr, sizeof(fromHwAddr));
+    // VerifyITable(obj->itable, frame->h_dest);
+    // There is no need to verify. In fact, you didn't check the return value either
 
-    odr_rpacket *rpkt = (odr_rpacket *)frame->data;
+    // get sender hardware address
+    /*char fromHwAddr[HWADDR_BUFFSIZE];
+    memcpy(&fromHwAddr, from->sll_addr, sizeof(fromHwAddr));*/
+
+    odr_rpacket *rpacket = (odr_rpacket *)frame->data;
 
     // get the 'forward' route from routing table
-    odr_rtable *forwardRoute = GetRouteItem(obj->rtable, rpkt->src);
-    if (forwardRoute == NULL)
+    odr_rtable *src_ritem = get_item_rtable(rpacket->src, obj);
+
+    if (src_ritem == NULL || src_ritem->hopcnt > rpacket->hopcnt) {
+        InsertOrUpdateRoutingTable(obj, src_ritem, rpacket->src, from->sll_addr, from->sll_ifindex, rpacket->hopcnt + 1, 0);
+        needReply = true;
+    }
+
+    /*if (forwardRoute == NULL)
     {
         // insert 'forward' route into routing table
         idx = InsertRoutingTable(obj->rtable, frame, fromHwAddr);
@@ -113,11 +139,11 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
             idx = forwardRoute->index;
             needReply = true;
         }
-    }
+    }*/
 
     if (needReply)
     {
-        // get the 'reverse' route from routing table
+        /*// get the 'reverse' route from routing table
         odr_rtable *reverseRoute = GetRouteItem(obj->rtable, rpkt->dst);
         if (reverseRoute == NULL)
         {
@@ -138,7 +164,30 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
         }
 
         printf("[ODR-RREP]: Propagate the RREP <src=%s dstIp=%s hop=%d>\n",
-            rrep.h_source, rpkt->dst, rpkt->hopcnt);
+            rrep.h_source, rpkt->dst, rpkt->hopcnt);*/
+
+        // You should add RREP to queue then call queue_handler()
+
+        // build apacket item
+        odr_queue_item  *item = (odr_queue_item *)Calloc(1, sizeof(odr_queue_item));
+        rpacket->hopcnt ++;
+
+        memcpy(item->data, rpacket, ODR_FRAME_PAYLOAD);
+
+        item->type = ODR_FRAME_RREP;
+        item->next = NULL;
+
+        // insert into queue
+        if (obj->queue.head == NULL) {
+            obj->queue.head = item;
+            obj->queue.tail = item;
+        } else {
+            obj->queue.tail->next = item;
+            obj->queue.tail = item;
+        }
+        printf("Queued up rrep_packet [DST: %s SRC: %s HOPCNT: %d FRD:%d]\n", rpacket->dst, rpacket->src, rpacket->hopcnt, rpacket->flag.frd);
+
+        // queue_handler(obj);
     }
 
     return 0;
