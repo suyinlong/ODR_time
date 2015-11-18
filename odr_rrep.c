@@ -115,7 +115,8 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
 
     if (src_ritem == NULL || src_ritem->hopcnt > rpacket->hopcnt) {
         InsertOrUpdateRoutingTable(obj, src_ritem, rpacket->src, from->sll_addr, from->sll_ifindex, rpacket->hopcnt + 1, 0);
-        needReply = true;
+        if (strcmp(obj->ipaddr, rpacket->src) != 0)
+            needReply = true;
     }
 
     /*if (forwardRoute == NULL)
@@ -187,7 +188,7 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
         }
         printf("Queued up rrep_packet [DST: %s SRC: %s HOPCNT: %d FRD:%d]\n", rpacket->dst, rpacket->src, rpacket->hopcnt, rpacket->flag.frd);
 
-        // queue_handler(obj);
+        queue_handler(obj);
     }
 
     return 0;

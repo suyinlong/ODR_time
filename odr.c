@@ -2,7 +2,7 @@
 * @File: odr.c
 * @Date: 2015-11-08 20:56:07
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-16 16:38:39
+* @Last Modified time: 2015-11-18 11:32:03
 * @Description:
 *     ODR main program, provides maintenance features of odr_object
 *     + odr_itable *get_item_itable(int index, odr_object *obj)
@@ -152,7 +152,7 @@ void purge_tables(odr_object *obj) {
     rp = obj->rtable;
     rtable = obj->rtable;
     while (rtable) {
-        if (rtable->timestamp + obj->staleness > t) {
+        if (rtable->timestamp + obj->staleness < t) {
             // remove the routing path
             if (rtable == obj->rtable) {
                 // remove head
@@ -176,7 +176,7 @@ void purge_tables(odr_object *obj) {
     pp = obj->ptable;
     ptable = obj->ptable;
     while (ptable) {
-        if (ptable->timestamp != 0 && ptable->timestamp + ODR_TIMETOLIVE > t) {
+        if (ptable->timestamp != 0 && ptable->timestamp + ODR_TIMETOLIVE < t) {
             // remove not head
             pp->next = ptable->next;
             free(ptable);
@@ -211,9 +211,6 @@ void process_frame(odr_object *obj) {
     bzero(&frame, sizeof(frame));
 
     len = recv_frame(obj->p_sockfd, &frame, (SA *)&from, &fromlen);
-
-    if (frame.h_proto != PROTOCOL_ID)
-        return;
 
     switch (frame.h_type) {
     case ODR_FRAME_RREQ:
@@ -284,12 +281,12 @@ void process_domain_dgram(odr_object *obj) {
     }
     printf("Queued up app_packet [DST: %s:%d SRC: %s:%d HOPCNT: %d FRD:%d DATA(%d): %s]\n", apacket->dst, apacket->dst_port, apacket->src, apacket->src_port, apacket->hopcnt, apacket->frd, apacket->length, apacket->data);
 
-    // queue_handler(obj);
+    queue_handler(obj);
 
     // for testing, send back
-    dgram.data[0] = 'T';
-    sendto(obj->d_sockfd, &dgram, sizeof(dgram), 0, (SA *)&from, addrlen);
-    printf("Send back.\n");
+    // dgram.data[0] = 'T';
+    // sendto(obj->d_sockfd, &dgram, sizeof(dgram), 0, (SA *)&from, addrlen);
+    // printf("Send back.\n");
 }
 
 /* --------------------------------------------------------------------------
