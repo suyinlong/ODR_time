@@ -168,5 +168,6 @@ void free_hwa_info(odr_itable *);
 
 odr_itable *get_item_itable(int, odr_object *);
 odr_rtable *get_item_rtable(const char *, odr_object *);
+odr_ptable *get_item_ptable(int, odr_object *);
 
 #endif

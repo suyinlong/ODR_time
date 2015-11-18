@@ -114,14 +114,14 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
     /*char fromHwAddr[HWADDR_BUFFSIZE];
     memcpy(&fromHwAddr, from->sll_addr, sizeof(fromHwAddr));*/
 
-    odr_rpacket *rpacket = (odr_rpacket *)frame->data;
+    odr_rpacket *rrep = (odr_rpacket *)frame->data;
 
     // get the 'forward' route from routing table
-    odr_rtable *src_ritem = get_item_rtable(rpacket->src, obj);
+    odr_rtable *dst_ritem = get_item_rtable(rrep->dst, obj);
 
-    if (src_ritem == NULL || src_ritem->hopcnt > rpacket->hopcnt) {
-        InsertOrUpdateRoutingTable(obj, src_ritem, rpacket->src, from->sll_addr, from->sll_ifindex, rpacket->hopcnt + 1, 0);
-        if (strcmp(obj->ipaddr, rpacket->src) != 0)
+    if (dst_ritem == NULL || dst_ritem->hopcnt > rrep->hopcnt) {
+        InsertOrUpdateRoutingTable(obj, dst_ritem, rrep->dst, from->sll_addr, from->sll_ifindex, rrep->hopcnt + 1, 0);
+        if (strcmp(obj->ipaddr, rrep->src) != 0)
             needReply = true;
     }
 
@@ -177,9 +177,9 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
 
         // build apacket item
         odr_queue_item  *item = (odr_queue_item *)Calloc(1, sizeof(odr_queue_item));
-        rpacket->hopcnt ++;
+        rrep->hopcnt ++;
 
-        memcpy(item->data, rpacket, ODR_FRAME_PAYLOAD);
+        memcpy(item->data, rrep, ODR_FRAME_PAYLOAD);
 
         item->type = ODR_FRAME_RREP;
         item->next = NULL;
@@ -192,10 +192,11 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
             obj->queue.tail->next = item;
             obj->queue.tail = item;
         }
-        printf("Queued up rrep_packet [DST: %s SRC: %s HOPCNT: %d FRD:%d]\n", rpacket->dst, rpacket->src, rpacket->hopcnt, rpacket->flag.frd);
+        printf("Queued up rrep_packet [DST: %s SRC: %s HOPCNT: %d FRD:%d]\n", rrep->dst, rrep->src, rrep->hopcnt, rrep->flag.frd);
 
-        queue_handler(obj);
     }
+
+    queue_handler(obj);
 
     return 0;
 }

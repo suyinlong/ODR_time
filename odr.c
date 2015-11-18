@@ -2,7 +2,7 @@
 * @File: odr.c
 * @Date: 2015-11-08 20:56:07
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-18 11:32:03
+* @Last Modified time: 2015-11-18 12:36:12
 * @Description:
 *     ODR main program, provides maintenance features of odr_object
 *     + odr_itable *get_item_itable(int index, odr_object *obj)
@@ -79,6 +79,21 @@ odr_rtable *get_item_rtable(const char *ipaddr, odr_object *obj) {
         item = item->next;
     }
 
+    return item;
+}
+
+odr_ptable *get_item_ptable(int port, odr_object *obj) {
+    odr_ptable *item = obj->ptable;
+
+    // find the item in ptable
+    while (item) {
+        if (item->port == port)
+            break;
+        item = item->next;
+    }
+
+    if (item && item->timestamp > 0)
+        item->timestamp = time(NULL);
     return item;
 }
 

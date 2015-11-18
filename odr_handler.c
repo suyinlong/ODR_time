@@ -2,7 +2,7 @@
 * @File: odr_handler.c
 * @Date: 2015-11-14 19:51:16
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-18 12:01:57
+* @Last Modified time: 2015-11-18 12:42:14
 * @Description:
 *     ODR frame and queued packet handler
 *     - void send_rreq(odr_object *obj, char *dst, char *src, uint hopcnt, uint bcast_id, int frdflag, int resflag)
@@ -138,11 +138,13 @@ void queue_handler(odr_object *obj) {
         if (route == NULL || apacket->frd == 1) {
             // destination is currently unreachable, send RREQ
             // or forced discovery, send rreq with flag.frd = 1
+            printf("[queue_handler] Desitnation is currently unreachable, send RREQ.\n");
             send_rreq(obj, apacket->dst, obj->ipaddr, 0, ++obj->bcast_id, apacket->frd, 0);
         } else {
             // found entry in rtable, send apacket via interface
             interface = get_item_itable(route->index, obj);
 
+            printf("[queue_handler] Send APPMSG via interface %d.\n", route->index);
             bzero(&frame, sizeof(frame));
             build_frame(&frame, route->nexthop, interface->if_haddr, ODR_FRAME_APPMSG, apacket);
             send_frame(obj->p_sockfd, route->index, &frame, PACKET_OTHERHOST);
@@ -263,6 +265,53 @@ void frame_rrep_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
 }
 
 void frame_appmsg_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
+    printf("[frame_appmsg_handler] Received APPMSG\n");
+
+    odr_apacket *appmsg = (odr_apacket *)frame->data;
+
+    // TODO: insert or update route path
+
+    if (strcmp(obj->ipaddr, appmsg->dst) == 0) {
+        // APPMSG reach destination
+        int port = appmsg->dst_port;
+        struct sockaddr_un addr;
+        odr_dgram dgram;
+        odr_ptable *pitem = get_item_ptable(port, obj);
+
+        bzero(&addr, sizeof(addr));
+        addr.sun_family = AF_LOCAL;
+        strcpy(addr.sun_path, pitem->path);
+
+        bzero(&dgram, sizeof(dgram));
+        strcpy(dgram.ipaddr, appmsg->src);
+        dgram.port = appmsg->src_port;
+        dgram.flag = appmsg->frd;
+        strcpy(dgram.data, appmsg->data);
+
+        printf("[frame_appmsg_handler] APPMSG reach destination, send to domain socket.\n");
+
+        sendto(obj->d_sockfd, &dgram, sizeof(dgram), 0, (SA *)&addr, sizeof(addr));
+    } else {
+        // APPMSG queue up
+        odr_queue_item  *item = (odr_queue_item *)Calloc(1, sizeof(odr_queue_item));
+        appmsg->hopcnt ++;
+
+        memcpy(item->data, appmsg, ODR_FRAME_PAYLOAD);
+
+        item->type = ODR_FRAME_APPMSG;
+        item->next = NULL;
+
+        // insert into queue
+        if (obj->queue.head == NULL) {
+            obj->queue.head = item;
+            obj->queue.tail = item;
+        } else {
+            obj->queue.tail->next = item;
+            obj->queue.tail = item;
+        }
+        //printf("Queued up appmsg [DST: %s SRC: %s HOPCNT: %d FRD:%d]\n", rrep->dst, rrep->src, rrep->hopcnt, rrep->flag.frd);
+        queue_handler(obj);
+    }
 
 }
 
