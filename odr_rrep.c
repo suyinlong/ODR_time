@@ -79,6 +79,7 @@ void UpdateRoutingTable(odr_rtable *item, const odr_frame *frame, const char *fr
 */
 
 void InsertOrUpdateRoutingTable(odr_object *obj, odr_rtable *item, char *dst, char *nexthop, int index, uint hopcnt, uint bcast_id) {
+    int i;
     if (item == NULL) {
         // insert a new route
         item = (odr_rtable *)Calloc(1, sizeof(odr_rtable));
@@ -93,6 +94,11 @@ void InsertOrUpdateRoutingTable(odr_object *obj, odr_rtable *item, char *dst, ch
     item->hopcnt = hopcnt;
     item->bcast_id = bcast_id;
     item->timestamp = time(NULL);
+
+    printf("[InsertOrUpdateRoutingTable] dst: %s, nexthop: ", item->dst);
+    for (i = 0; i < 6; i++)
+        printf("%.2x%s", item->nexthop[i] & 0xff, (i == 5 ? ", ": ":"));
+    printf("index: %d, hopcnt: %d, bcast_id: %d, timestamp: %ld\n", item->index, item->hopcnt, item->bcast_id, item->timestamp);
 }
 
 
