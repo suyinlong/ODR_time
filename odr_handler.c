@@ -244,7 +244,7 @@ void frame_rrep_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
 }
 
 void frame_appmsg_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
-
+    HandleAppMsg(obj, frame, from);
 }
 
 /* --------------------------------------------------------------------------

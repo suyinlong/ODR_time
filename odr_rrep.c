@@ -82,7 +82,7 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
     int idx = 0;
     bool needReply = false;
      // verify whether a node is source from hardware interface table
-    VerifyITable(obj->itable, frame->h_dest);
+    // VerifyITable(obj->itable, frame->h_dest);
     
     // get sender hardware address
     char fromHwAddr[HWADDR_BUFFSIZE];
@@ -101,8 +101,10 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
             printf("[ODR-RREP]: Get interface index error\n");
             return -1;
         }
-
         needReply = true;
+
+        printf("[ODR-RREP]: Insert a 'forward' route [dst=%s next=%s hop=%d]\n", 
+            rpkt->src, fromHwAddr, rpkt->hopcnt);
     }
     else
     {
@@ -112,6 +114,9 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
             UpdateRoutingTable(forwardRoute, frame, fromHwAddr);
             idx = forwardRoute->index;
             needReply = true;
+
+            printf("[ODR-RREP]: Update a 'forward' route [dst=%s next=%s hop=%d]\n",
+                rpkt->src, fromHwAddr, rpkt->hopcnt);
         }
     }
 
@@ -140,6 +145,33 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
         printf("[ODR-RREP]: Propagate the RREP <src=%s dstIp=%s hop=%d>\n",
             rrep.h_source, rpkt->dst, rpkt->hopcnt);
     }
+
+    return 0;
+}
+
+int HandleAppMsg(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
+{
+    odr_rpacket *rpkt = (odr_rpacket *)frame->data;
+
+    // get the 'forward' route from routing table
+    odr_rtable *route = GetRouteItem(obj->rtable, rpkt->dst);
+    if (route == NULL)
+    {
+        printf("[ODR-APP]: No route [%s --> %s]\n", rpkt->src, rpkt->dst);
+        return -1;
+    }
+
+    // get next node address
+    strcpy(frame->h_dest, route->nexthop);
+    
+    if (send_frame(obj->p_sockfd, route->index, frame, PACKET_OTHERHOST) < 0)
+    {
+        printf("[ODR-APP]: Send AppMsg error, %s\n", strerror(errno));
+        return -1;
+    }
+    
+    printf("[ODR-APP]: Send AppMsg from [ip=%s mac=%s] to [ip=%s mac=%s]\n",
+        rpkt->src, frame->h_source, rpkt->dst, frame->h_dest);
 
     return 0;
 }
