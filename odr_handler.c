@@ -2,7 +2,7 @@
 * @File: odr_handler.c
 * @Date: 2015-11-14 19:51:16
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-16 16:51:43
+* @Last Modified time: 2015-11-17 18:08:51
 * @Description:
 *     ODR frame and queued packet handler
 *     - void send_rreq(odr_object *obj, char *dst, char *src, uint hopcnt, uint bcast_id, int frdflag, int resflag)
@@ -99,6 +99,7 @@ void send_rrep(odr_object *obj, char *dst, char *src, uint hopcnt, int frdflag) 
 
 }
 
+
 /* --------------------------------------------------------------------------
  *  queue_handler
  *
@@ -193,7 +194,9 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
 
     if (src_ritem == NULL) {
         // insert a new routing path (reverse route back)
-        src_ritem = (odr_rtable *)Calloc(1, sizeof(odr_rtable));
+        InsertOrUpdateRoutingTable(obj, src_ritem, rpacket->src, frame->h_source, from->sll_ifindex, rpacket->hopcnt + 1, rpacket->bcast_id);
+
+        /*src_ritem = (odr_rtable *)Calloc(1, sizeof(odr_rtable));
         strcpy(src_ritem->dst, rpacket->src);
         strcpy(src_ritem->nexthop, frame->h_source);
         src_ritem->index = from->sll_ifindex;
@@ -201,7 +204,7 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
         src_ritem->bcast_id = rpacket->bcast_id;
         src_ritem->timestamp = time(NULL);
         src_ritem->next = obj->rtable;
-        obj->rtable = src_ritem;
+        obj->rtable = src_ritem;*/
 
         bcast_rreq_flag = 1;
     }
@@ -210,11 +213,13 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
         || (rpacket->hopcnt + 1 == src_ritem->hopcnt
             && strcmp(src_ritem->nexthop, frame->h_source) != 0)) {  // same hopcnt but different path
         // update the routing path (reverse route back)
-        strcpy(src_ritem->nexthop, frame->h_source);
+        InsertOrUpdateRoutingTable(obj, src_ritem, rpacket->src, frame->h_source, from->sll_ifindex, rpacket->hopcnt + 1, rpacket->bcast_id);
+
+        /*strcpy(src_ritem->nexthop, frame->h_source);
         src_ritem->index = from->sll_ifindex;
         src_ritem->hopcnt = rpacket->hopcnt;
         src_ritem->bcast_id = rpacket->bcast_id;
-        src_ritem->timestamp = time(NULL);
+        src_ritem->timestamp = time(NULL);*/
 
         bcast_rreq_flag = 1;
     }

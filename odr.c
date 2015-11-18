@@ -284,7 +284,7 @@ void process_domain_dgram(odr_object *obj) {
     }
     printf("Queued up app_packet [DST: %s:%d SRC: %s:%d HOPCNT: %d FRD:%d DATA(%d): %s]\n", apacket->dst, apacket->dst_port, apacket->src, apacket->src_port, apacket->hopcnt, apacket->frd, apacket->length, apacket->data);
 
-    // queue_handler(obj);
+    queue_handler(obj);
 
     // for testing, send back
     dgram.data[0] = 'T';

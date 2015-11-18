@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
 sendagain:
         strcpy(data, "R");
         msg_send(sockfd, srv_ipaddr, TIMESERV_PORT, data, resend);
-        printf("client at node %s: send request to server at %s %s\n", cli_hostname, srv_hostname, (resend ? "(forced discovery)" : ""));
+        printf("client at node %s: send request to server at %s(%s) %s\n", cli_hostname, srv_hostname, srv_ipaddr, (resend ? "(forced discovery)" : ""));
 
         bzero(data, ODR_DGRAM_DATALEN);
         i = msg_recv(sockfd, data, srv_ipaddr, &port);
