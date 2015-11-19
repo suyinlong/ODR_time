@@ -2,7 +2,7 @@
 * @File: odr_handler.c
 * @Date: 2015-11-14 19:51:16
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-18 20:35:56
+* @Last Modified time: 2015-11-18 21:43:47
 * @Description:
 *     ODR frame and queued packet handler
 *     - void send_rreq(odr_object *obj, char *dst, char *src, uint hopcnt, uint bcast_id, int frdflag, int resflag)
@@ -50,13 +50,16 @@ void send_rreq(odr_object *obj, char *dst, char *src, uint hopcnt, uint bcast_id
     rreq.hopcnt = hopcnt;
     rreq.bcast_id = bcast_id;
 
-    printf("[send_rreq] RREQ (dst: %s src: %s frd: %d res: %d hopcnt: %d bcast_id: %d) broadcasting...\n", rreq.dst, rreq.src, rreq.flag.frd, rreq.flag.res, rreq.hopcnt, rreq.bcast_id);
+    printf("[send_rreq] RREQ (dst: %s src: %s frd: %d res: %d hopcnt: %d bcast_id: %d)\n", rreq.dst, rreq.src, rreq.flag.frd, rreq.flag.res, rreq.hopcnt, rreq.bcast_id);
+    printf("            broadcast via interface: ");
     // send the frame via all interfaces
     for (itable = obj->itable; itable != NULL; itable = itable->hwa_next) {
         bzero(&frame, sizeof(frame));
         build_bcast_frame(&frame, itable->if_haddr, ODR_FRAME_RREQ, &rreq);
         send_frame(obj->p_sockfd, itable->if_index, &frame, PACKET_BROADCAST);
+        printf("%d ", itable->if_index);
     }
+    printf("\n");
 }
 
 /* --------------------------------------------------------------------------
@@ -95,11 +98,12 @@ void send_rrep(odr_object *obj, char *dst, char *src, uint hopcnt, int frdflag) 
     rtable = get_item_rtable(src, obj);
     itable = get_item_itable(rtable->index, obj);
 
-    printf("[send_rrep] RREP (dst: %s src: %s frd: %d res: %d hopcnt: %d) sending back...\n", rrep.dst, rrep.src, rrep.flag.frd, rrep.flag.res, rrep.hopcnt);
+    printf("[send_rrep] RREP (dst: %s src: %s frd: %d res: %d hopcnt: %d)\n", rrep.dst, rrep.src, rrep.flag.frd, rrep.flag.res, rrep.hopcnt);
     // send the frame via the interface
     bzero(&frame, sizeof(frame));
     build_bcast_frame(&frame, itable->if_haddr, ODR_FRAME_RREP, &rrep);
     send_frame(obj->p_sockfd, rtable->index, &frame, PACKET_OTHERHOST);
+    printf("            unicast via interface: %d\n", rtable->index);
 
 }
 
@@ -193,13 +197,21 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
     uchar       newsflag = 0;           // new S flag
     uchar       newrreqflag = 0;        // new RREQ flag
     uchar       newhopflag = 0;         // new path having smaller hopcnt flag
-    int         s, d;                   // node number of src and dst
+    int         s, d, i;                // node number of src and dst
     odr_rpacket *rreq;
     odr_rtable  *src_ritem, *dst_ritem;
 
     // get rpacket in frame
     rreq = (odr_rpacket *)frame->data;
     printf("[frame_rreq_handler] Received RREQ (dst: %s src: %s frd: %d res: %d hopcnt: %d bcast_id: %d)\n", rreq->dst, rreq->src, rreq->flag.frd, rreq->flag.res, rreq->hopcnt, rreq->bcast_id);
+    printf("                     from interface %d mac: ", from->sll_ifindex);
+    for (i = 0; i < 6; i++)
+        printf("%.2x%s", frame->h_source[i] & 0xff, (i < 5) ? ":" : "\n");
+
+    if (strcmp(obj->ipaddr, rreq->src) == 0) {
+        printf("[frame_rreq_handler] RREQ was sent by local node, ignored.\n");
+        return;
+    }
     // find routing items in rtable
     src_ritem = get_item_rtable(rreq->src, obj);
     dst_ritem = get_item_rtable(rreq->dst, obj);
