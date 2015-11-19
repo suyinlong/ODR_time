@@ -78,7 +78,7 @@ void UpdateRoutingTable(odr_rtable *item, const odr_frame *frame, const char *fr
 }
 */
 
-void InsertOrUpdateRoutingTable(odr_object *obj, odr_rtable *item, char *dst, char *nexthop, int index, uint hopcnt, uint bcast_id) {
+void InsertOrUpdateRoutingTable(odr_object *obj, odr_rtable *item, char *dst, char *nexthop, int index, uint hopcnt) {
     int i;
     if (item == NULL) {
         // insert a new route
@@ -92,13 +92,12 @@ void InsertOrUpdateRoutingTable(odr_object *obj, odr_rtable *item, char *dst, ch
     memcpy(item->nexthop, nexthop, HWADDR_BUFFSIZE);
     item->index = index;
     item->hopcnt = hopcnt;
-    item->bcast_id = bcast_id;
     item->timestamp = time(NULL);
 
     printf("[InsertOrUpdateRoutingTable] dst: %s, nexthop: ", item->dst);
     for (i = 0; i < 6; i++)
         printf("%.2x%s", item->nexthop[i] & 0xff, (i == 5 ? ", ": ":"));
-    printf("index: %d, hopcnt: %d, bcast_id: %d, timestamp: %ld\n", item->index, item->hopcnt, item->bcast_id, item->timestamp);
+    printf("index: %d, hopcnt: %d\n", item->index, item->hopcnt);
 }
 
 
@@ -120,7 +119,7 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
     odr_rtable *dst_ritem = get_item_rtable(rrep->dst, obj);
 
     if (dst_ritem == NULL || dst_ritem->hopcnt > rrep->hopcnt) {
-        InsertOrUpdateRoutingTable(obj, dst_ritem, rrep->dst, from->sll_addr, from->sll_ifindex, rrep->hopcnt + 1, 0);
+        InsertOrUpdateRoutingTable(obj, dst_ritem, rrep->dst, from->sll_addr, from->sll_ifindex, rrep->hopcnt + 1);
         if (strcmp(obj->ipaddr, rrep->src) != 0)
             needReply = true;
     }

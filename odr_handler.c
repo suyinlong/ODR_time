@@ -2,7 +2,7 @@
 * @File: odr_handler.c
 * @Date: 2015-11-14 19:51:16
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-18 12:42:14
+* @Last Modified time: 2015-11-18 20:35:56
 * @Description:
 *     ODR frame and queued packet handler
 *     - void send_rreq(odr_object *obj, char *dst, char *src, uint hopcnt, uint bcast_id, int frdflag, int resflag)
@@ -190,7 +190,10 @@ void queue_handler(odr_object *obj) {
 
 void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
     uchar       resflag = 0;            // reply already sent flag
-    int         bcast_rreq_flag = 1;    // continue broadcast RREQ flag
+    uchar       newsflag = 0;           // new S flag
+    uchar       newrreqflag = 0;        // new RREQ flag
+    uchar       newhopflag = 0;         // new path having smaller hopcnt flag
+    int         s, d;                   // node number of src and dst
     odr_rpacket *rreq;
     odr_rtable  *src_ritem, *dst_ritem;
 
@@ -200,49 +203,70 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
     // find routing items in rtable
     src_ritem = get_item_rtable(rreq->src, obj);
     dst_ritem = get_item_rtable(rreq->dst, obj);
+    // get the broadcast id for ss, ds
+    s = util_ip_to_index(rreq->src);
+    d = util_ip_to_index(rreq->dst);
 
-    if (src_ritem == NULL) {
-        // insert a new routing path (reverse route back)
-        printf("[frame_rreq_handler] New route path inserting...\n");
-        InsertOrUpdateRoutingTable(obj, src_ritem, rreq->src, frame->h_source, from->sll_ifindex, rreq->hopcnt + 1, rreq->bcast_id);
-
-        /*src_ritem = (odr_rtable *)Calloc(1, sizeof(odr_rtable));
-        strcpy(src_ritem->dst, rpacket->src);
-        strcpy(src_ritem->nexthop, frame->h_source);
-        src_ritem->index = from->sll_ifindex;
-        src_ritem->hopcnt = rpacket->hopcnt;
-        src_ritem->bcast_id = rpacket->bcast_id;
-        src_ritem->timestamp = time(NULL);
-        src_ritem->next = obj->rtable;
-        obj->rtable = src_ritem;*/
-
-        //bcast_rreq_flag = 1;
-    }
-    else if (rreq->flag.frd == 1                                 // forced discovery = true
-        || rreq->hopcnt + 1 < src_ritem->hopcnt                  // shorter path
+    if (src_ritem == NULL)
+        newsflag = 1;
+    if (rreq->bcast_id > obj->b_ids[s][s]) {
+        // insert or update a new routing path (reverse route back)
+        InsertOrUpdateRoutingTable(obj, src_ritem, rreq->src, frame->h_source, from->sll_ifindex, rreq->hopcnt + 1);
+        obj->b_ids[s][s] = rreq->bcast_id;
+        newrreqflag = 1;
+    } else if (rreq->flag.frd == 1                          // forced discovery = true
+        || rreq->hopcnt + 1 < src_ritem->hopcnt             // shorter path
         || (rreq->hopcnt + 1 == src_ritem->hopcnt
-            && strcmp(src_ritem->nexthop, frame->h_source) != 0)) {  // same hopcnt but different path
+            && strncmp(src_ritem->nexthop, frame->h_source, HWADDR_BUFFSIZE) != 0)) {   // same hopcnt but different path
         // update the routing path (reverse route back)
-        printf("[frame_rreq_handler] Existing route path updating...\n");
-        InsertOrUpdateRoutingTable(obj, src_ritem, rreq->src, frame->h_source, from->sll_ifindex, rreq->hopcnt + 1, rreq->bcast_id);
-
-        /*strcpy(src_ritem->nexthop, frame->h_source);
-        src_ritem->index = from->sll_ifindex;
-        src_ritem->hopcnt = rpacket->hopcnt;
-        src_ritem->bcast_id = rpacket->bcast_id;
-        src_ritem->timestamp = time(NULL);*/
-
-        //bcast_rreq_flag = 1;
+        if (rreq->hopcnt + 1 < src_ritem->hopcnt)
+            newhopflag = 1;
+        InsertOrUpdateRoutingTable(obj, src_ritem, rreq->src, frame->h_source, from->sll_ifindex, rreq->hopcnt + 1);
+        obj->b_ids[s][s] = rreq->bcast_id;
     }
 
-
+    // TODO: check
     if (strcmp(rreq->dst, obj->ipaddr) == 0) {
         // destination, send RREP back
         printf("[frame_rreq_handler] RREQ reached destination, send back RREP\n");
         send_rrep(obj, rreq->dst, rreq->src, 0, rreq->flag.frd);
         resflag = 1;
-        bcast_rreq_flag = 0;
+        return;
+    } else {
+        // intermediate node
+        if (rreq->bcast_id > obj->b_ids[d][s]) {
+            obj->b_ids[d][s] = rreq->bcast_id;
+            if (dst_ritem != NULL                                       // have routing path to destionation
+                && rreq->flag.frd == 0                                  // forced discovery = false
+                && rreq->flag.res == 0                                  // reply already sent = false
+                && strcmp(dst_ritem->nexthop, frame->h_source) != 0) {  // split horizon
+                // intermediate node, send RREP back
+                printf("[frame_rreq_handler] RREQ reached intermediate, send back RREP\n");
+                send_rrep(obj, rreq->dst, rreq->src, dst_ritem->hopcnt, rreq->flag.frd);
+                resflag = 1;
+            }
+        } else if (dst_ritem != NULL
+            && newhopflag == 1) {
+            printf("[frame_rreq_handler] RREQ reached intermediate, send back RREP\n");
+            send_rrep(obj, rreq->dst, rreq->src, dst_ritem->hopcnt, rreq->flag.frd);
+            resflag = 1;
+        }
     }
+
+    if (dst_ritem == NULL && (newrreqflag == 1 || newhopflag == 1)) {
+        // send out rreq
+        printf("[frame_rreq_handler] Broadcast RREQ\n");
+        send_rreq(obj, rreq->dst, rreq->src, rreq->hopcnt + 1, rreq->bcast_id, rreq->flag.frd, resflag);
+    }
+
+    if (dst_ritem != NULL && (newsflag == 1 || newhopflag == 1)) {
+        // send out rreq
+        printf("[frame_rreq_handler] Broadcast RREQ\n");
+        send_rreq(obj, rreq->dst, rreq->src, rreq->hopcnt + 1, rreq->bcast_id, rreq->flag.frd, resflag);
+    }
+
+
+    /*
     if (dst_ritem != NULL                                       // have routing path to destionation
         && rreq->flag.frd == 0                                  // forced discovery = false
         && rreq->flag.res == 0                                  // reply already sent = false
@@ -256,7 +280,7 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
         // send rreq out
         printf("[frame_rreq_handler] Broadcast RREQ\n");
         send_rreq(obj, rreq->dst, rreq->src, rreq->hopcnt + 1, rreq->bcast_id, rreq->flag.frd, resflag);
-    }
+    }*/
 }
 
 void frame_rrep_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
@@ -338,7 +362,7 @@ void debug_route_handler(odr_object *obj) {
         printf("%.2x | ", r->nexthop[i] & 0xff);
         printf("%2d | ", r->index);
         printf("%2d | ", r->hopcnt);
-        printf("%4d | ", r->bcast_id);
+        //printf("%4d | ", r->bcast_id);
         printf("\n");
         r = r->next;
     }

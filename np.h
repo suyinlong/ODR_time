@@ -16,6 +16,7 @@
 #define ODR_FRAME_LEN       128
 #define ODR_PATH            "/tmp/14508-61375-timeODR"
 
+#define ODR_MAX_NODE        10
 #define ODR_TIMETOLIVE      180
 
 #define TIMESERV_PATH       "/tmp/14508-61375-timeServer"
@@ -68,7 +69,6 @@ typedef struct odr_rtable_t {
     char    nexthop[HWADDR_BUFFSIZE];   /* next hop MAC address */
     int     index;                      /* interface index      */
     uint    hopcnt;                     /* hop count            */
-    uint    bcast_id;                   /* max broadcast id     */
     long    timestamp;                  /* timestamp of update  */
     struct odr_rtable_t *next;          /* next entry pointer   */
 } odr_rtable;
@@ -149,17 +149,18 @@ typedef struct odr_queue_t {
 
 // Main ODR information object
 typedef struct odr_object_t {
-    unsigned long   staleness;                      /* in seconds           */
-    char            ipaddr[IPADDR_BUFFSIZE];        /* IP address           */
-    char            hostname[HOSTNAME_BUFFSIZE];    /* Host name            */
-    odr_itable      *itable;                        /* Hardware information */
-    odr_rtable      *rtable;                        /* routing table        */
-    odr_ptable      *ptable;                        /* port and path table  */
-    odr_queue       queue;                          /* ODR message queue    */
-    int             d_sockfd;                       /* Domain socket        */
-    int             p_sockfd;                       /* PF_PACKET socket     */
-    uint            bcast_id;                       /* Broadcast ID         */
-    int             free_port;                      /* free port number     */
+    unsigned long   staleness;                          /* in seconds           */
+    char            ipaddr[IPADDR_BUFFSIZE];            /* IP address           */
+    char            hostname[HOSTNAME_BUFFSIZE];        /* Host name            */
+    odr_itable      *itable;                            /* Hardware information */
+    odr_rtable      *rtable;                            /* routing table        */
+    odr_ptable      *ptable;                            /* port and path table  */
+    odr_queue       queue;                              /* ODR message queue    */
+    uint            b_ids[ODR_MAX_NODE][ODR_MAX_NODE];  /* Broadcast ID table   */
+    int             d_sockfd;                           /* Domain socket        */
+    int             p_sockfd;                           /* PF_PACKET socket     */
+    uint            bcast_id;                           /* Broadcast ID         */
+    int             free_port;                          /* free port number     */
 } odr_object;
 
 odr_itable *get_hw_addrs(char *);
