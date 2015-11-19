@@ -79,6 +79,7 @@ void UpdateRoutingTable(odr_rtable *item, const odr_frame *frame, const char *fr
 */
 
 void InsertOrUpdateRoutingTable(odr_object *obj, odr_rtable *item, char *dst, char *nexthop, int index, uint hopcnt, uint bcast_id) {
+    int i;
     if (item == NULL) {
         // insert a new route
         item = (odr_rtable *)Calloc(1, sizeof(odr_rtable));
@@ -93,6 +94,11 @@ void InsertOrUpdateRoutingTable(odr_object *obj, odr_rtable *item, char *dst, ch
     item->hopcnt = hopcnt;
     item->bcast_id = bcast_id;
     item->timestamp = time(NULL);
+
+    printf("[InsertOrUpdateRoutingTable] dst: %s, nexthop: ", item->dst);
+    for (i = 0; i < 6; i++)
+        printf("%.2x%s", item->nexthop[i] & 0xff, (i == 5 ? ", ": ":"));
+    printf("index: %d, hopcnt: %d, bcast_id: %d, timestamp: %ld\n", item->index, item->hopcnt, item->bcast_id, item->timestamp);
 }
 
 
@@ -107,14 +113,18 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
     /*char fromHwAddr[HWADDR_BUFFSIZE];
     memcpy(&fromHwAddr, from->sll_addr, sizeof(fromHwAddr));*/
 
-    odr_rpacket *rpacket = (odr_rpacket *)frame->data;
-
+    odr_rpacket *rrep = (odr_rpacket *)frame->data;
+    printf("[frame_rrep_handler] Received RREP (dst:%s src:%s bcast_id:%d hop:%d)\n", rrep->dst, rrep->src, rrep->bcast_id, rrep->hopcnt);
+    
     // get the 'forward' route from routing table
-    odr_rtable *src_ritem = get_item_rtable(rpacket->src, obj);
+    odr_rtable *dst_ritem = get_item_rtable(rrep->dst, obj);
 
-    if (src_ritem == NULL || src_ritem->hopcnt > rpacket->hopcnt) {
-        InsertOrUpdateRoutingTable(obj, src_ritem, rpacket->src, from->sll_addr, from->sll_ifindex, rpacket->hopcnt + 1, 0);
-        needReply = true;
+    if (dst_ritem == NULL || dst_ritem->hopcnt > rrep->hopcnt) {
+        InsertOrUpdateRoutingTable(obj, dst_ritem, rrep->dst, from->sll_addr, from->sll_ifindex, rrep->hopcnt + 1, 0);
+        if (strcmp(obj->ipaddr, rrep->src) != 0)
+            needReply = true;
+        else
+            printf("[frame_rrep_handler] RREP reached the source node(%s)\n", rrep->src);
     }
 
     /*
@@ -173,9 +183,9 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
         
         // build apacket item
         odr_queue_item  *item = (odr_queue_item *)Calloc(1, sizeof(odr_queue_item));
-        rpacket->hopcnt ++;
+        rrep->hopcnt ++;
 
-        memcpy(item->data, rpacket, ODR_FRAME_PAYLOAD);
+        memcpy(item->data, rrep, ODR_FRAME_PAYLOAD);
 
         item->type = ODR_FRAME_RREP;
         item->next = NULL;
@@ -188,8 +198,8 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
             obj->queue.tail->next = item;
             obj->queue.tail = item;
         }
-        printf("Queued up rrep_packet [DST: %s SRC: %s HOPCNT: %d FRD:%d]\n", rpacket->dst, rpacket->src, rpacket->hopcnt, rpacket->flag.frd);
-
+        
+        printf("Queued up rrep_packet [DST: %s SRC: %s HOPCNT: %d FRD: %d]\n", rrep->dst, rrep->src, rrep->hopcnt, rrep->flag.frd);
         queue_handler(obj);
     }
 

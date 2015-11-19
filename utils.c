@@ -2,12 +2,12 @@
 * @File: utils.c
 * @Date: 2015-11-10 22:56:21
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-17 19:24:33
+* @Last Modified time: 2015-11-17 19:55:42
 * @Description:
 *     Util function library, some miscellaneous helper functions
-*     + void util_ip_to_hostname(const char *ipaddr, char *hostname)
+*     + int util_ip_to_hostname(const char *ipaddr, char *hostname)
 *         [Convert IP address to hostname]
-*     + void util_hostname_to_ip(const char *hostname, char *ipaddr)
+*     + int util_hostname_to_ip(const char *hostname, char *ipaddr)
 *         [Convert hostname to IP address]
 */
 
@@ -26,14 +26,14 @@
  * --------------------------------------------------------------------------
  */
 int util_ip_to_hostname(const char *ipaddr, char *hostname) {
-    struct sockaddr_in  servaddr;
+    struct sockaddr_in  sockaddr;
     struct hostent      *he;
 
-    bzero(&servaddr, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
+    bzero(&sockaddr, sizeof(sockaddr));
+    sockaddr.sin_family = AF_INET;
 
-    inet_pton(AF_INET, ipaddr, &servaddr.sin_addr);
-    he = gethostbyaddr(&servaddr.sin_addr, sizeof(servaddr.sin_addr), AF_INET);
+    inet_pton(AF_INET, ipaddr, &sockaddr.sin_addr);
+    he = gethostbyaddr(&sockaddr.sin_addr, sizeof(sockaddr.sin_addr), AF_INET);
     if (he == NULL) {
         printf("util_ip_to_hostname error: gethostbyaddr error for %s\n", ipaddr);
         return -1;

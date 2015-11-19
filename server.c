@@ -2,7 +2,7 @@
 * @File: server.c
 * @Date: 2015-11-08 20:56:53
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-14 20:30:30
+* @Last Modified time: 2015-11-18 12:59:09
 * @Description:
 *     + int main(int argc, char **argv)
 *         [Server entry function]
@@ -31,6 +31,10 @@ int main(int argc, char **argv) {
     struct sockaddr_un cliaddr;
     struct sockaddr_un servaddr;
 
+    bzero(&servaddr, sizeof(servaddr));
+    servaddr.sun_family = AF_LOCAL;
+    strcpy(servaddr.sun_path, TIMESERV_PATH);
+
     unlink(servaddr.sun_path);
 
     // get IP address of current node
@@ -39,10 +43,6 @@ int main(int argc, char **argv) {
 
     // create and bind domain socket
     sockfd = Socket(AF_LOCAL, SOCK_DGRAM, 0);
-
-    bzero(&servaddr, sizeof(servaddr));
-    servaddr.sun_family = AF_LOCAL;
-    strcpy(servaddr.sun_path, TIMESERV_PATH);
 
     Bind(sockfd, (SA *)&servaddr, sizeof(servaddr));
 
