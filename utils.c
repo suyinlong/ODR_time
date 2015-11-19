@@ -2,7 +2,7 @@
 * @File: utils.c
 * @Date: 2015-11-10 22:56:21
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-17 19:55:42
+* @Last Modified time: 2015-11-18 16:24:42
 * @Description:
 *     Util function library, some miscellaneous helper functions
 *     + int util_ip_to_hostname(const char *ipaddr, char *hostname)
@@ -64,4 +64,20 @@ int util_hostname_to_ip(const char *hostname, char *ipaddr) {
     }
     strncpy(ipaddr, inet_ntoa(*(struct in_addr*)he->h_addr), IPADDR_BUFFSIZE);
     return 0;
+}
+
+/* --------------------------------------------------------------------------
+ *  util_ip_to_index
+ *
+ *  Util function
+ *
+ *  @param  : const char    *ipaddr     [IP address]
+ *  @return : int           [ index in bcast_id table ]
+ *
+ *  Convert IP address to index
+ *  vm1 -> 1, vm2 -> 2, ..., vm9 -> 9, vm10 -> 0
+ * --------------------------------------------------------------------------
+ */
+int util_ip_to_index(const char *ipaddr) {
+    return (ipaddr[strlen(ipaddr)-1] - '0');
 }

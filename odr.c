@@ -2,13 +2,15 @@
 * @File: odr.c
 * @Date: 2015-11-08 20:56:07
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-18 12:36:12
+* @Last Modified time: 2015-11-18 20:41:22
 * @Description:
 *     ODR main program, provides maintenance features of odr_object
 *     + odr_itable *get_item_itable(int index, odr_object *obj)
 *         [ODR itable index finder]
 *     + odr_rtable *get_item_rtable(const char *ipaddr, odr_object *obj)
 *         [ODR rtable routing path finder]
+*     + odr_ptable *get_item_ptable(int port, odr_object *obj)
+*         [ODR ptable domain path finder]
 *     - int get_port_ptable(const char *path, odr_object *obj)
 *         [ODR ptable path-port finder]
 *     - void purge_tables(odr_object *obj)
@@ -82,6 +84,19 @@ odr_rtable *get_item_rtable(const char *ipaddr, odr_object *obj) {
     return item;
 }
 
+/* --------------------------------------------------------------------------
+ *  get_item_ptable
+ *
+ *  Ptable domain path finder
+ *
+ *  @param  : int           port    [Port number]
+ *            odr_object    *obj    [odr object]
+ *  @return : odr_ptable *          [domain path entry]
+ *
+ *  Find the domain path entry of the destination port number
+ *  return NULL if port number is currently unreachable
+ * --------------------------------------------------------------------------
+ */
 odr_ptable *get_item_ptable(int port, odr_object *obj) {
     odr_ptable *item = obj->ptable;
 
@@ -125,7 +140,7 @@ int get_port_ptable(const char *path, odr_object *obj) {
         // if found, update timestamp and return port number
         if (item->timestamp > 0)
             item->timestamp = time(NULL);
-        printf("[ptable] Path: %s, Port: %d, Timestamp: %ld\n", item->path, item->port, item->timestamp);
+        //printf("[ptable] Path: %s, Port: %d, Timestamp: %ld\n", item->path, item->port, item->timestamp);
         return item->port;
     } else {
         // otherwise, create new one then plug in
@@ -140,7 +155,7 @@ int get_port_ptable(const char *path, odr_object *obj) {
         newitem->next = obj->ptable->next;
 
         obj->ptable->next = newitem;
-        printf("[ptable] New Path: %s, Port: %d, Timestamp: %ld\n", newitem->path, newitem->port, newitem->timestamp);
+        //printf("[ptable] New Path: %s, Port: %d, Timestamp: %ld\n", newitem->path, newitem->port, newitem->timestamp);
         return newitem->port;
     }
 }
