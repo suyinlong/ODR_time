@@ -2,7 +2,7 @@
 * @File: odr.c
 * @Date: 2015-11-08 20:56:07
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-18 20:41:22
+* @Last Modified time: 2015-11-18 22:26:18
 * @Description:
 *     ODR main program, provides maintenance features of odr_object
 *     + odr_itable *get_item_itable(int index, odr_object *obj)
@@ -309,7 +309,7 @@ void process_domain_dgram(odr_object *obj) {
         obj->queue.tail->next = item;
         obj->queue.tail = item;
     }
-    printf("Queued up app_packet [DST: %s:%d SRC: %s:%d HOPCNT: %d FRD:%d DATA(%d): %s]\n", apacket->dst, apacket->dst_port, apacket->src, apacket->src_port, apacket->hopcnt, apacket->frd, apacket->length, apacket->data);
+    printf("Queued up APPMSG (dst: %s:%d src: %s:%d hopcnt: %d frd: %d data[%d]: %s)\n", apacket->dst, apacket->dst_port, apacket->src, apacket->src_port, apacket->hopcnt, apacket->frd, apacket->length, apacket->data);
 
     queue_handler(obj);
 

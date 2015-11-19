@@ -2,7 +2,7 @@
 * @File: odr_handler.c
 * @Date: 2015-11-14 19:51:16
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-18 21:43:47
+* @Last Modified time: 2015-11-18 22:38:43
 * @Description:
 *     ODR frame and queued packet handler
 *     - void send_rreq(odr_object *obj, char *dst, char *src, uint hopcnt, uint bcast_id, int frdflag, int resflag)
@@ -78,6 +78,7 @@ void send_rreq(odr_object *obj, char *dst, char *src, uint hopcnt, uint bcast_id
  * --------------------------------------------------------------------------
  */
 void send_rrep(odr_object *obj, char *dst, char *src, uint hopcnt, int frdflag) {
+    int i;
     odr_frame   frame;
     odr_rpacket rrep;
     odr_itable  *itable;
@@ -101,9 +102,11 @@ void send_rrep(odr_object *obj, char *dst, char *src, uint hopcnt, int frdflag) 
     printf("[send_rrep] RREP (dst: %s src: %s frd: %d res: %d hopcnt: %d)\n", rrep.dst, rrep.src, rrep.flag.frd, rrep.flag.res, rrep.hopcnt);
     // send the frame via the interface
     bzero(&frame, sizeof(frame));
-    build_bcast_frame(&frame, itable->if_haddr, ODR_FRAME_RREP, &rrep);
+    build_frame(&frame, rtable->nexthop, itable->if_haddr, ODR_FRAME_RREP, &rrep);
     send_frame(obj->p_sockfd, rtable->index, &frame, PACKET_OTHERHOST);
-    printf("            unicast via interface: %d\n", rtable->index);
+    printf("            unicast via interface %d to ", rtable->index);
+    for (i = 0; i < 6; i++)
+        printf("%.2x%s", rtable->nexthop[i] & 0xff, (i < 5) ? ":" : "\n");
 
 }
 
@@ -123,7 +126,7 @@ void send_rrep(odr_object *obj, char *dst, char *src, uint hopcnt, int frdflag) 
  * --------------------------------------------------------------------------
  */
 void queue_handler(odr_object *obj) {
-    int freeflag = 0;
+    int i, freeflag = 0;
     odr_rtable *route;
     odr_itable *interface;
     odr_rpacket *rpacket;
@@ -135,8 +138,8 @@ void queue_handler(odr_object *obj) {
         return;
 
     if (obj->queue.head->type == ODR_FRAME_APPMSG) {
-        printf("[queue_handler] processing APPMSG...\n");
         apacket = (odr_apacket *)obj->queue.head->data;
+        printf("[queue_handler] Processing APPMSG (dst: %s:%d src: %s:%d hopcnt: %d frd: %d data[%d]: %s)\n", apacket->dst, apacket->dst_port, apacket->src, apacket->src_port, apacket->hopcnt, apacket->frd, apacket->length, apacket->data);
         route = get_item_rtable(apacket->dst, obj);
 
         if (route == NULL || apacket->frd == 1) {
@@ -148,7 +151,9 @@ void queue_handler(odr_object *obj) {
             // found entry in rtable, send apacket via interface
             interface = get_item_itable(route->index, obj);
 
-            printf("[queue_handler] Send APPMSG via interface %d.\n", route->index);
+            printf("[queue_handler] Send APPMSG via interface %d to ", route->index);
+            for (i = 0; i < 6; i++)
+                printf("%.2x%s", route->nexthop[i] & 0xff, (i < 5) ? ":" : "\n");
             bzero(&frame, sizeof(frame));
             build_frame(&frame, route->nexthop, interface->if_haddr, ODR_FRAME_APPMSG, apacket);
             send_frame(obj->p_sockfd, route->index, &frame, PACKET_OTHERHOST);
@@ -156,15 +161,19 @@ void queue_handler(odr_object *obj) {
             freeflag = 1;
         }
     } else if (obj->queue.head->type == ODR_FRAME_RREP) {
-        printf("[queue_handler] processing RREP...\n");
         rpacket = (odr_rpacket *)obj->queue.head->data;
-        route = get_item_rtable(rpacket->dst, obj); // TODO: Is it dst or src?
+        printf("[queue_handler] Processing RREP (dst: %s src: %s hopcnt: %d)\n", rpacket->dst, rpacket->src, rpacket->hopcnt);
+        route = get_item_rtable(rpacket->src, obj);
 
         if (route == NULL) {
-            send_rreq(obj, rpacket->dst, obj->ipaddr, 0, ++obj->bcast_id, 0, 0);
+            printf("[queue_handler] Source is currently unreachable, send RREQ.\n");
+            send_rreq(obj, rpacket->src, obj->ipaddr, 0, ++obj->bcast_id, 0, 0);
         } else {
             interface = get_item_itable(route->index, obj);
 
+            printf("[queue_handler] Send RREP via interface %d to ", route->index);
+            for (i = 0; i < 6; i++)
+                printf("%.2x%s", route->nexthop[i] & 0xff, (i < 5) ? ":" : "\n");
             bzero(&frame, sizeof(frame));
             build_frame(&frame, route->nexthop, interface->if_haddr, ODR_FRAME_RREP, rpacket);
             send_frame(obj->p_sockfd, route->index, &frame, PACKET_OTHERHOST);
@@ -203,13 +212,13 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
 
     // get rpacket in frame
     rreq = (odr_rpacket *)frame->data;
-    printf("[frame_rreq_handler] Received RREQ (dst: %s src: %s frd: %d res: %d hopcnt: %d bcast_id: %d)\n", rreq->dst, rreq->src, rreq->flag.frd, rreq->flag.res, rreq->hopcnt, rreq->bcast_id);
-    printf("                     from interface %d mac: ", from->sll_ifindex);
+    printf("[rreq_handler] Received RREQ (dst: %s src: %s frd: %d res: %d hopcnt: %d bcast_id: %d)\n", rreq->dst, rreq->src, rreq->flag.frd, rreq->flag.res, rreq->hopcnt, rreq->bcast_id);
+    printf("               from interface %d mac: ", from->sll_ifindex);
     for (i = 0; i < 6; i++)
         printf("%.2x%s", frame->h_source[i] & 0xff, (i < 5) ? ":" : "\n");
 
     if (strcmp(obj->ipaddr, rreq->src) == 0) {
-        printf("[frame_rreq_handler] RREQ was sent by local node, ignored.\n");
+        printf("[rreq_handler] RREQ was sent by local node, ignored.\n");
         return;
     }
     // find routing items in rtable
@@ -238,9 +247,10 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
     }
 
     // TODO: check
-    if (strcmp(rreq->dst, obj->ipaddr) == 0) {
+    if (strcmp(rreq->dst, obj->ipaddr) == 0 && rreq->bcast_id > obj->b_ids[d][s]) {
         // destination, send RREP back
-        printf("[frame_rreq_handler] RREQ reached destination, send back RREP\n");
+        obj->b_ids[d][s] = rreq->bcast_id;
+        printf("[rreq_handler] RREQ reached destination, send back RREP\n");
         send_rrep(obj, rreq->dst, rreq->src, 0, rreq->flag.frd);
         resflag = 1;
         return;
@@ -253,13 +263,13 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
                 && rreq->flag.res == 0                                  // reply already sent = false
                 && strcmp(dst_ritem->nexthop, frame->h_source) != 0) {  // split horizon
                 // intermediate node, send RREP back
-                printf("[frame_rreq_handler] RREQ reached intermediate, send back RREP\n");
+                printf("[rreq_handler] RREQ reached intermediate, send back RREP\n");
                 send_rrep(obj, rreq->dst, rreq->src, dst_ritem->hopcnt, rreq->flag.frd);
                 resflag = 1;
             }
         } else if (dst_ritem != NULL
             && newhopflag == 1) {
-            printf("[frame_rreq_handler] RREQ reached intermediate, send back RREP\n");
+            printf("[rreq_handler] RREQ reached intermediate, send back RREP\n");
             send_rrep(obj, rreq->dst, rreq->src, dst_ritem->hopcnt, rreq->flag.frd);
             resflag = 1;
         }
@@ -267,32 +277,15 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
 
     if (dst_ritem == NULL && (newrreqflag == 1 || newhopflag == 1)) {
         // send out rreq
-        printf("[frame_rreq_handler] Broadcast RREQ\n");
+        printf("[rreq_handler] Broadcast RREQ\n");
         send_rreq(obj, rreq->dst, rreq->src, rreq->hopcnt + 1, rreq->bcast_id, rreq->flag.frd, resflag);
     }
 
     if (dst_ritem != NULL && (newsflag == 1 || newhopflag == 1)) {
         // send out rreq
-        printf("[frame_rreq_handler] Broadcast RREQ\n");
+        printf("[rreq_handler] Broadcast RREQ\n");
         send_rreq(obj, rreq->dst, rreq->src, rreq->hopcnt + 1, rreq->bcast_id, rreq->flag.frd, resflag);
     }
-
-
-    /*
-    if (dst_ritem != NULL                                       // have routing path to destionation
-        && rreq->flag.frd == 0                                  // forced discovery = false
-        && rreq->flag.res == 0                                  // reply already sent = false
-        && strcmp(dst_ritem->nexthop, frame->h_source) != 0) {  // split horizon
-        // intermediate node, send RREP back
-        printf("[frame_rreq_handler] RREQ reached intermediate, send back RREP\n");
-        send_rrep(obj, rreq->dst, rreq->src, dst_ritem->hopcnt, rreq->flag.frd);
-        resflag = 1;
-    }
-    if (bcast_rreq_flag) {
-        // send rreq out
-        printf("[frame_rreq_handler] Broadcast RREQ\n");
-        send_rreq(obj, rreq->dst, rreq->src, rreq->hopcnt + 1, rreq->bcast_id, rreq->flag.frd, resflag);
-    }*/
 }
 
 void frame_rrep_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
@@ -300,7 +293,7 @@ void frame_rrep_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
 }
 
 void frame_appmsg_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
-    printf("[frame_appmsg_handler] Received APPMSG\n");
+    printf("[appmsg_handler] Received APPMSG\n");
 
     odr_apacket *appmsg = (odr_apacket *)frame->data;
 
@@ -323,7 +316,7 @@ void frame_appmsg_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll 
         dgram.flag = appmsg->frd;
         strcpy(dgram.data, appmsg->data);
 
-        printf("[frame_appmsg_handler] APPMSG reach destination, send to domain socket.\n");
+        printf("[appmsg_handler] APPMSG reach destination, send to domain socket.\n");
 
         sendto(obj->d_sockfd, &dgram, sizeof(dgram), 0, (SA *)&addr, sizeof(addr));
     } else {

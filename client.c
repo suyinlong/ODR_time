@@ -2,7 +2,7 @@
 * @File: client.c
 * @Date: 2015-11-08 20:57:18
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-14 20:14:49
+* @Last Modified time: 2015-11-18 22:33:43
 * @Description:
 *     + int main(int argc, char **argv)
 *         [Client entry function]
@@ -82,8 +82,8 @@ int main(int argc, char **argv) {
 
 sendagain:
         strcpy(data, "R");
-        msg_send(sockfd, srv_ipaddr, TIMESERV_PORT, data, resend);
         printf("client at node %s: send request to server at %s %s\n", cli_hostname, srv_hostname, (resend ? "(forced discovery)" : ""));
+        msg_send(sockfd, srv_ipaddr, TIMESERV_PORT, data, resend);
 
         bzero(data, ODR_DGRAM_DATALEN);
         i = msg_recv(sockfd, data, srv_ipaddr, &port);
