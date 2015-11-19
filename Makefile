@@ -49,7 +49,7 @@ get_hw_addrs.o: get_hw_addrs.c
 
 clean:
 	rm -f ODR_${USR} server_${USR} client_${USR} *.o
-
+	
 install:
-	~/cse533/deploy_app ODR_${USR} server_${USR} client_${USR}
+	~/cse533/deploy_app ODR_${USR} server_${USR} client_${USR}	
 

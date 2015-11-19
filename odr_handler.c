@@ -131,15 +131,14 @@ void queue_handler(odr_object *obj) {
         return;
 
     if (obj->queue.head->type == ODR_FRAME_APPMSG) {
-        //printf("[queue_handler] processing APPMSG...\n");
+        printf("[queue_handler] processing APPMSG...\n");
         apacket = (odr_apacket *)obj->queue.head->data;
-        printf("[queue_handler] processing APPMSG (dst:%s src:%s hop:%d)...\n", apacket->dst, apacket->src, apacket->hopcnt);
         route = get_item_rtable(apacket->dst, obj);
 
         if (route == NULL || apacket->frd == 1) {
             // destination is currently unreachable, send RREQ
             // or forced discovery, send rreq with flag.frd = 1
-            printf("[queue_handler] Destination is currently unreachable, send RREQ.\n");
+            printf("[queue_handler] Desitnation is currently unreachable, send RREQ.\n");
             send_rreq(obj, apacket->dst, obj->ipaddr, 0, ++obj->bcast_id, apacket->frd, 0);
         } else {
             // found entry in rtable, send apacket via interface
@@ -153,9 +152,8 @@ void queue_handler(odr_object *obj) {
             freeflag = 1;
         }
     } else if (obj->queue.head->type == ODR_FRAME_RREP) {
-        //printf("[queue_handler] processing RREP...\n");
+        printf("[queue_handler] processing RREP...\n");
         rpacket = (odr_rpacket *)obj->queue.head->data;
-        printf("[queue_handler] processing RREP (dst:%s src:%s bcast_id:%d hop:%d)...\n", rpacket->dst, rpacket->src, rpacket->bcast_id, rpacket->hopcnt);
         route = get_item_rtable(rpacket->dst, obj); // TODO: Is it dst or src?
 
         if (route == NULL) {
@@ -201,11 +199,7 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
 
     // get rpacket in frame
     rreq = (odr_rpacket *)frame->data;
-    if (rreq->bcast_id == obj->bcast_id)    // ignore the rreq of itself
-        return;
-
-    printf("[frame_rreq_handler] Received RREQ (dst: %s src: %s frd: %d res: %d hopcnt: %d bcast_id: %d) from(ifindex:%d addr:%s)\n", 
-        rreq->dst, rreq->src, rreq->flag.frd, rreq->flag.res, rreq->hopcnt, rreq->bcast_id, from->sll_ifindex, from->sll_addr);
+    printf("[frame_rreq_handler] Received RREQ (dst: %s src: %s frd: %d res: %d hopcnt: %d bcast_id: %d)\n", rreq->dst, rreq->src, rreq->flag.frd, rreq->flag.res, rreq->hopcnt, rreq->bcast_id);
     // find routing items in rtable
     src_ritem = get_item_rtable(rreq->src, obj);
     dst_ritem = get_item_rtable(rreq->dst, obj);
@@ -290,7 +284,6 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
 }
 
 void frame_rrep_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
-    //printf("[frame_rrep_handler] Received RREP\n");
     HandleRREP(obj, frame, from);
 }
 
@@ -342,6 +335,7 @@ void frame_appmsg_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll 
         //printf("Queued up appmsg [DST: %s SRC: %s HOPCNT: %d FRD:%d]\n", rrep->dst, rrep->src, rrep->hopcnt, rrep->flag.frd);
         queue_handler(obj);
     }
+
 }
 
 /* --------------------------------------------------------------------------
