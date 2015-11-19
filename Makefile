@@ -9,7 +9,7 @@ FLAGS = -g -O2
 
 CFLAGS = ${FLAGS} -I${UNP_DIR}/lib
 
-all: ODR_${USR} server_${USR} client_${USR}
+all: ODR_${USR} server_${USR} client_${USR} test_route
 
 utils.o: utils.c
 	${CC} ${CFLAGS} -c utils.c
@@ -47,9 +47,15 @@ client.o: client.c
 get_hw_addrs.o: get_hw_addrs.c
 	${CC} ${CFLAGS} -c get_hw_addrs.c
 
+test_route: test_route.o odr_frame.o get_hw_addrs.o
+	${CC} ${CFLAGS} -o test_route test_route.o odr_frame.o get_hw_addrs.o ${LIBS}
+
+test_route.o: test_route.c
+	${CC} ${CFLAGS} -c test_route.c
+
 clean:
 	rm -f ODR_${USR} server_${USR} client_${USR} *.o
-	
+
 install:
-	~/cse533/deploy_app ODR_${USR} server_${USR} client_${USR}	
+	~/cse533/deploy_app ODR_${USR} server_${USR} client_${USR}
 

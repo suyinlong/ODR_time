@@ -2,7 +2,7 @@
 * @File: odr_handler.c
 * @Date: 2015-11-14 19:51:16
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-18 23:45:00
+* @Last Modified time: 2015-11-19 11:40:55
 * @Description:
 *     ODR frame and queued packet handler
 *     - void send_rreq(odr_object *obj, char *dst, char *src, uint hopcnt, uint bcast_id, int frdflag, int resflag)
@@ -148,7 +148,28 @@ void queue_handler(odr_object *obj) {
         printf("[queue_handler] Processing APPMSG (dst: %s:%d src: %s:%d hopcnt: %d frd: %d data[%d]: %s)\n", apacket->dst, apacket->dst_port, apacket->src, apacket->src_port, apacket->hopcnt, apacket->frd, apacket->length, apacket->data);
         route = get_item_rtable(apacket->dst, obj);
 
-        if (route == NULL || apacket->frd == 1) {
+        if (strcmp(obj->ipaddr, apacket->dst) == 0) {
+            // APPMSG reach destination
+            int port = apacket->dst_port;
+            struct sockaddr_un addr;
+            odr_dgram dgram;
+            odr_ptable *pitem = get_item_ptable(port, obj);
+
+            bzero(&addr, sizeof(addr));
+            addr.sun_family = AF_LOCAL;
+            strcpy(addr.sun_path, pitem->path);
+
+            bzero(&dgram, sizeof(dgram));
+            strcpy(dgram.ipaddr, apacket->src);
+            dgram.port = apacket->src_port;
+            dgram.flag = apacket->frd;
+            strcpy(dgram.data, apacket->data);
+
+            printf("[queue_handler] APPMSG reach destination, send to domain socket.\n");
+
+            sendto(obj->d_sockfd, &dgram, sizeof(dgram), 0, (SA *)&addr, sizeof(addr));
+            freeflag = 1;
+        } else if (route == NULL || apacket->frd == 1) {
             // destination is currently unreachable, send RREQ
             // or forced discovery, send rreq with flag.frd = 1
             printf("[queue_handler] Destination is currently unreachable, send RREQ.\n");
@@ -347,7 +368,7 @@ void frame_appmsg_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll 
 
     odr_apacket *appmsg = (odr_apacket *)frame->data;
 
-    // TODO: insert or update route path
+    // insert or update route path
     odr_rtable *ritem = get_item_rtable(appmsg->src, obj);
     if (ritem == NULL || ritem->hopcnt > appmsg->hopcnt + 1) {
         InsertOrUpdateRoutingTable(obj, ritem, appmsg->src, from->sll_addr, from->sll_ifindex, appmsg->hopcnt + 1);
@@ -414,17 +435,19 @@ void debug_route_handler(odr_object *obj) {
     int i;
     odr_rtable *r = obj->rtable;
 
+    printf("\n");
+    printf("+----- IP address -----+---- Next hop -----+- I -+- H -+\n");
     while (r) {
         printf("| %-*s | ", IPADDR_BUFFSIZE, r->dst);
-        for (i = 0; i < 5; i++)
-            printf("%.2x:", r->nexthop[i] & 0xff);
-        printf("%.2x | ", r->nexthop[i] & 0xff);
-        printf("%2d | ", r->index);
-        printf("%2d | ", r->hopcnt);
+        for (i = 0; i < 6; i++)
+            printf("%.2x%s", r->nexthop[i] & 0xff, (i < 5) ? ":" : " | ");
+        printf("%3d | ", r->index);
+        printf("%3d | ", r->hopcnt);
         //printf("%4d | ", r->bcast_id);
         printf("\n");
         r = r->next;
     }
+    printf("+----------------------+-------------------+-----+-----+\n");
 }
 
 /* --------------------------------------------------------------------------
