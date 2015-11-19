@@ -138,7 +138,7 @@ void queue_handler(odr_object *obj) {
         if (route == NULL || apacket->frd == 1) {
             // destination is currently unreachable, send RREQ
             // or forced discovery, send rreq with flag.frd = 1
-            printf("[queue_handler] Desitnation is currently unreachable, send RREQ.\n");
+            printf("[queue_handler] Destination is currently unreachable, send RREQ.\n");
             send_rreq(obj, apacket->dst, obj->ipaddr, 0, ++obj->bcast_id, apacket->frd, 0);
         } else {
             // found entry in rtable, send apacket via interface
