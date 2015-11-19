@@ -2,15 +2,21 @@
 * @File: odr_handler.c
 * @Date: 2015-11-14 19:51:16
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-18 22:38:43
+* @Last Modified time: 2015-11-18 23:45:00
 * @Description:
 *     ODR frame and queued packet handler
 *     - void send_rreq(odr_object *obj, char *dst, char *src, uint hopcnt, uint bcast_id, int frdflag, int resflag)
 *         [RREQ send function]
-*     - void send_rrep
-*         []
+*     - void send_rrep(odr_object *obj, char *dst, char *src, uint hopcnt, int frdflag)
+*         [RREP send function]
 *     + void queue_handler(odr_object *obj)
 *         [Queue handler]
+*     + void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
+*         [Frame RREQ handler]
+*     + void frame_rrep_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
+*         [Frame RREP handler]
+*     + void frame_appmsg_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
+*         [Frame APPMSG handler]
 */
 
 #include "np.h"
@@ -74,7 +80,7 @@ void send_rreq(odr_object *obj, char *dst, char *src, uint hopcnt, uint bcast_id
  *            int           frdflag     [Forced discovery flag]
  *  @return : void
  *
- *  Send RREP via routing interface
+ *  Send RREP via route interface
  * --------------------------------------------------------------------------
  */
 void send_rrep(odr_object *obj, char *dst, char *src, uint hopcnt, int frdflag) {
@@ -201,6 +207,20 @@ void queue_handler(odr_object *obj) {
 
 }
 
+/* --------------------------------------------------------------------------
+ *  frame_rreq_handler
+ *
+ *  Frame RREQ handler
+ *
+ *  @param  : odr_object            *obj    [odr object]
+ *            odr_frame             *frame  [received frame]
+ *            struct sockaddr_ll    *from   [socket sender address]
+ *  @return : void
+ *
+ *  Handle received RREQ
+ *
+ * --------------------------------------------------------------------------
+ */
 void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
     uchar       resflag = 0;            // reply already sent flag
     uchar       newsflag = 0;           // new S flag
@@ -288,16 +308,51 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
     }
 }
 
+/* --------------------------------------------------------------------------
+ *  frame_rrep_handler
+ *
+ *  Frame RREP handler
+ *
+ *  @param  : odr_object            *obj    [odr object]
+ *            odr_frame             *frame  [received frame]
+ *            struct sockaddr_ll    *from   [socket sender address]
+ *  @return : void
+ *
+ *  Handle received RREP
+ *
+ * --------------------------------------------------------------------------
+ */
 void frame_rrep_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
     HandleRREP(obj, frame, from);
 }
 
+/* --------------------------------------------------------------------------
+ *  frame_appmsg_handler
+ *
+ *  Frame APPMSG handler
+ *
+ *  @param  : odr_object            *obj    [odr object]
+ *            odr_frame             *frame  [received frame]
+ *            struct sockaddr_ll    *from   [socket sender address]
+ *  @return : void
+ *
+ *  Handle received APPMSG
+ *  1. Insert or update route path if possible
+ *  2. If APPMSG reaches destination, send to domain socket
+ *  3. Otherwise, put APPMSG into queue
+ * --------------------------------------------------------------------------
+ */
 void frame_appmsg_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
     printf("[appmsg_handler] Received APPMSG\n");
 
     odr_apacket *appmsg = (odr_apacket *)frame->data;
 
     // TODO: insert or update route path
+    odr_rtable *ritem = get_item_rtable(appmsg->src, obj);
+    if (ritem == NULL || ritem->hopcnt > appmsg->hopcnt + 1) {
+        InsertOrUpdateRoutingTable(obj, ritem, appmsg->src, from->sll_addr, from->sll_ifindex, appmsg->hopcnt + 1);
+        printf("[appmsg_handler] APPMSG route path insert/update.\n");
+    }
 
     if (strcmp(obj->ipaddr, appmsg->dst) == 0) {
         // APPMSG reach destination
