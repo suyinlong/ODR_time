@@ -2,7 +2,7 @@
 * @File: odr_handler.c
 * @Date: 2015-11-14 19:51:16
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-19 19:44:32
+* @Last Modified time: 2015-11-20 17:56:06
 * @Description:
 *     ODR frame and queued packet handler
 *     - void send_rreq(odr_object *obj, char *dst, char *src, uint hopcnt, uint bcast_id, int frdflag, int resflag)
@@ -343,7 +343,6 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
         return;
     } else {
         // intermediate node
-        printf("rreq->bcast_id: %d obj->b_ids[d][s]: %d %s\n", rreq->bcast_id, obj->b_ids[d][s], (dst_ritem == NULL) ? "NULL" : "NOT NULL");
         if (rreq->bcast_id > obj->b_ids[d][s]) {
             obj->b_ids[d][s] = rreq->bcast_id;
             if (dst_ritem != NULL                                       // have routing path to destionation
@@ -411,9 +410,13 @@ void frame_rrep_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
  * --------------------------------------------------------------------------
  */
 void frame_appmsg_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
-    printf("[appmsg_handler] Received APPMSG\n");
+    int i;
 
     odr_apacket *appmsg = (odr_apacket *)frame->data;
+    printf("[appmsg_handler] Received APPMSG (dst: %s:%d src: %s:%d hopcnt: %d frd: %d data(%d): %s)\n", appmsg->dst, appmsg->dst_port, appmsg->src, appmsg->src_port, appmsg->hopcnt, appmsg->frd, appmsg->length, appmsg->data);
+    printf("                 from interface %d mac: ", from->sll_ifindex);
+    for (i = 0; i < 6; i++)
+        printf("%.2x%s", frame->h_source[i] & 0xff, (i < 5) ? ":" : "\n");
 
     // insert or update route path
     odr_rtable *ritem = get_item_rtable(appmsg->src, obj);
@@ -434,6 +437,7 @@ void frame_appmsg_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll 
         memcpy(item->data, appmsg, ODR_FRAME_PAYLOAD);
 
         item->type = ODR_FRAME_APPMSG;
+        item->timestamp = time(NULL);
         item->next = NULL;
 
         // insert into queue

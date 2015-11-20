@@ -63,6 +63,7 @@ int HandleRREP(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
         memcpy(item->data, rrep, ODR_FRAME_PAYLOAD);
 
         item->type = ODR_FRAME_RREP;
+        item->timestamp = time(NULL);
         item->next = NULL;
 
         // insert into queue
