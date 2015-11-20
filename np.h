@@ -37,13 +37,16 @@
 #define ODR_FRAME_RREP      1
 #define ODR_FRAME_APPMSG    2
 #define ODR_FRAME_ROUTE     3
-#define ODR_FRAME_DATA      9
+#define ODR_FRAME_INTERFACE 4
 
 #define ODR_DGRAM_DATALEN   ODR_APACKET_PAYLOAD
 
 #define IF_NAME             16
 #define IF_HADDR            6
 #define IP_ALIAS            1
+
+#define MSG_RECV_TIMEOUT    5
+#define QUEUE_TIMEOUT       3
 
 typedef unsigned char   BITFIELD8;
 typedef unsigned char   uchar;
@@ -139,6 +142,7 @@ typedef struct odr_dgram_t {
 // odr apacket queue (waiting to send)
 typedef struct odr_queue_item_t {
     ushort  type;                       /* frame type       */
+    long    timestamp;                  /* queue timestamp  */
     char    data[ODR_FRAME_PAYLOAD];    /* frame payload    */
     struct odr_queue_item_t *next;
 } odr_queue_item;

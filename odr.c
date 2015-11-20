@@ -2,7 +2,7 @@
 * @File: odr.c
 * @Date: 2015-11-08 20:56:07
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-18 22:26:18
+* @Last Modified time: 2015-11-19 19:41:19
 * @Description:
 *     ODR main program, provides maintenance features of odr_object
 *     + odr_itable *get_item_itable(int index, odr_object *obj)
@@ -255,8 +255,8 @@ void process_frame(odr_object *obj) {
     case ODR_FRAME_ROUTE:
         debug_route_handler(obj);
         break;
-    case ODR_FRAME_DATA:
-        debug_data_handler(&frame, &from, fromlen);
+    case ODR_FRAME_INTERFACE:
+        debug_interface_handler(obj);
     }
 
 }
@@ -299,6 +299,7 @@ void process_domain_dgram(odr_object *obj) {
     strcpy(apacket->data, dgram.data);
 
     item->type = ODR_FRAME_APPMSG;
+    item->timestamp = time(NULL);
     item->next = NULL;
 
     // insert into queue
@@ -312,11 +313,6 @@ void process_domain_dgram(odr_object *obj) {
     printf("Queued up APPMSG (dst: %s:%d src: %s:%d hopcnt: %d frd: %d data[%d]: %s)\n", apacket->dst, apacket->dst_port, apacket->src, apacket->src_port, apacket->hopcnt, apacket->frd, apacket->length, apacket->data);
 
     queue_handler(obj);
-
-    // for testing, send back
-    // dgram.data[0] = 'T';
-    // sendto(obj->d_sockfd, &dgram, sizeof(dgram), 0, (SA *)&from, addrlen);
-    // printf("Send back.\n");
 }
 
 /* --------------------------------------------------------------------------

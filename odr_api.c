@@ -2,7 +2,7 @@
 * @File: odr_api.c
 * @Date: 2015-11-13 00:15:31
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-14 20:26:41
+* @Last Modified time: 2015-11-19 19:43:43
 * @Description:
 *     ODR API, provides domain socketdatagram communication between ODR
 *     service and client/server
@@ -69,7 +69,7 @@ int msg_recv(int sockfd, char *data, char *src, int *port) {
     FD_ZERO(&rset);
     FD_SET(sockfd, &rset);
     bzero(&dgram, sizeof(dgram));
-    timeout.tv_sec  = 5;
+    timeout.tv_sec  = MSG_RECV_TIMEOUT;
     timeout.tv_usec = 0;
 
     r = Select(sockfd + 1, &rset, NULL, NULL, &timeout);

@@ -2,13 +2,17 @@
 * @File: odr_handler.c
 * @Date: 2015-11-14 19:51:16
 * @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-19 11:40:55
+* @Last Modified time: 2015-11-19 19:44:32
 * @Description:
 *     ODR frame and queued packet handler
 *     - void send_rreq(odr_object *obj, char *dst, char *src, uint hopcnt, uint bcast_id, int frdflag, int resflag)
 *         [RREQ send function]
 *     - void send_rrep(odr_object *obj, char *dst, char *src, uint hopcnt, int frdflag)
 *         [RREP send function]
+*     - int cmp_hwaddrs(char *addr1, char *addr2)
+*         [MAC address compare function]
+*     - void send_dgram(odr_object *obj, odr_apacket *appmsg)
+*         [Dgram APPMSG send function]
 *     + void queue_handler(odr_object *obj)
 *         [Queue handler]
 *     + void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
@@ -116,6 +120,61 @@ void send_rrep(odr_object *obj, char *dst, char *src, uint hopcnt, int frdflag) 
 
 }
 
+/* --------------------------------------------------------------------------
+ *  cmp_hwaddrs
+ *
+ *  MAC address compare function
+ *
+ *  @param  : char          *addr1      [MAC address 1]
+ *            char          *addr2      [MAC address 2]
+ *  @return : int           [0 if not equal, 1 if equal]
+ *
+ *  MAC address compare function
+ * --------------------------------------------------------------------------
+ */
+int cmp_hwaddrs(char *addr1, char *addr2) {
+    int i;
+    for (i = 0; i < 6; i++)
+        if ((addr1[i] & 0xff) != (addr2[i] & 0xff))
+            return 0;
+    return 1;
+}
+
+/* --------------------------------------------------------------------------
+ *  send_dgram
+ *
+ *  Dgram APPMSG send function
+ *
+ *  @param  : odr_object    *obj        [odr object]
+ *            odr_apacket   *appmsg     [APPMSG]
+ *  @return : void
+ *
+ *  Send APPMSG to local domain path
+ * --------------------------------------------------------------------------
+ */
+void send_dgram(odr_object *obj, odr_apacket *appmsg) {
+    // APPMSG reach destination, send to domain socket
+    int port = appmsg->dst_port;
+    struct sockaddr_un addr;
+    odr_dgram   dgram;
+    odr_ptable  *pitem = get_item_ptable(port, obj);
+
+    if (pitem == NULL) {
+        printf("[send_dgram] Error: Port number not available.\n");
+        return;
+    }
+    bzero(&addr, sizeof(addr));
+    addr.sun_family = AF_LOCAL;
+    strcpy(addr.sun_path, pitem->path);
+
+    bzero(&dgram, sizeof(dgram));
+    strcpy(dgram.ipaddr, appmsg->src);
+    dgram.port = appmsg->src_port;
+    dgram.flag = appmsg->frd;
+    strcpy(dgram.data, appmsg->data);
+
+    sendto(obj->d_sockfd, &dgram, sizeof(dgram), 0, (SA *)&addr, sizeof(addr));
+}
 
 /* --------------------------------------------------------------------------
  *  queue_handler
@@ -143,31 +202,18 @@ void queue_handler(odr_object *obj) {
     if (obj->queue.head == NULL)
         return;
 
-    if (obj->queue.head->type == ODR_FRAME_APPMSG) {
+    if (obj->queue.head->timestamp + QUEUE_TIMEOUT <= time(NULL)) {
+        // queue timeout, fail and remove
+        freeflag = 1;
+    } else if (obj->queue.head->type == ODR_FRAME_APPMSG) {
         apacket = (odr_apacket *)obj->queue.head->data;
         printf("[queue_handler] Processing APPMSG (dst: %s:%d src: %s:%d hopcnt: %d frd: %d data[%d]: %s)\n", apacket->dst, apacket->dst_port, apacket->src, apacket->src_port, apacket->hopcnt, apacket->frd, apacket->length, apacket->data);
         route = get_item_rtable(apacket->dst, obj);
 
         if (strcmp(obj->ipaddr, apacket->dst) == 0) {
             // APPMSG reach destination
-            int port = apacket->dst_port;
-            struct sockaddr_un addr;
-            odr_dgram dgram;
-            odr_ptable *pitem = get_item_ptable(port, obj);
-
-            bzero(&addr, sizeof(addr));
-            addr.sun_family = AF_LOCAL;
-            strcpy(addr.sun_path, pitem->path);
-
-            bzero(&dgram, sizeof(dgram));
-            strcpy(dgram.ipaddr, apacket->src);
-            dgram.port = apacket->src_port;
-            dgram.flag = apacket->frd;
-            strcpy(dgram.data, apacket->data);
-
             printf("[queue_handler] APPMSG reach destination, send to domain socket.\n");
-
-            sendto(obj->d_sockfd, &dgram, sizeof(dgram), 0, (SA *)&addr, sizeof(addr));
+            send_dgram(obj, apacket);
             freeflag = 1;
         } else if (route == NULL || apacket->frd == 1) {
             // destination is currently unreachable, send RREQ
@@ -297,12 +343,13 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
         return;
     } else {
         // intermediate node
+        printf("rreq->bcast_id: %d obj->b_ids[d][s]: %d %s\n", rreq->bcast_id, obj->b_ids[d][s], (dst_ritem == NULL) ? "NULL" : "NOT NULL");
         if (rreq->bcast_id > obj->b_ids[d][s]) {
             obj->b_ids[d][s] = rreq->bcast_id;
             if (dst_ritem != NULL                                       // have routing path to destionation
                 && rreq->flag.frd == 0                                  // forced discovery = false
                 && rreq->flag.res == 0                                  // reply already sent = false
-                && strcmp(dst_ritem->nexthop, frame->h_source) != 0) {  // split horizon
+                && cmp_hwaddrs(dst_ritem->nexthop, frame->h_source) == 0) {  // split horizon
                 // intermediate node, send RREP back
                 printf("[rreq_handler] RREQ reached intermediate, send back RREP\n");
                 send_rrep(obj, rreq->dst, rreq->src, dst_ritem->hopcnt, rreq->flag.frd);
@@ -371,30 +418,14 @@ void frame_appmsg_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll 
     // insert or update route path
     odr_rtable *ritem = get_item_rtable(appmsg->src, obj);
     if (ritem == NULL || ritem->hopcnt > appmsg->hopcnt + 1) {
-        InsertOrUpdateRoutingTable(obj, ritem, appmsg->src, from->sll_addr, from->sll_ifindex, appmsg->hopcnt + 1);
         printf("[appmsg_handler] APPMSG route path insert/update.\n");
+        InsertOrUpdateRoutingTable(obj, ritem, appmsg->src, from->sll_addr, from->sll_ifindex, appmsg->hopcnt + 1);
     }
 
     if (strcmp(obj->ipaddr, appmsg->dst) == 0) {
         // APPMSG reach destination
-        int port = appmsg->dst_port;
-        struct sockaddr_un addr;
-        odr_dgram dgram;
-        odr_ptable *pitem = get_item_ptable(port, obj);
-
-        bzero(&addr, sizeof(addr));
-        addr.sun_family = AF_LOCAL;
-        strcpy(addr.sun_path, pitem->path);
-
-        bzero(&dgram, sizeof(dgram));
-        strcpy(dgram.ipaddr, appmsg->src);
-        dgram.port = appmsg->src_port;
-        dgram.flag = appmsg->frd;
-        strcpy(dgram.data, appmsg->data);
-
         printf("[appmsg_handler] APPMSG reach destination, send to domain socket.\n");
-
-        sendto(obj->d_sockfd, &dgram, sizeof(dgram), 0, (SA *)&addr, sizeof(addr));
+        send_dgram(obj, appmsg);
     } else {
         // APPMSG queue up
         odr_queue_item  *item = (odr_queue_item *)Calloc(1, sizeof(odr_queue_item));
@@ -451,25 +482,31 @@ void debug_route_handler(odr_object *obj) {
 }
 
 /* --------------------------------------------------------------------------
- *  debug_data_handler
+ *  debug_interface_handler
  *
- *  Debug function to print pure text
+ *  Debug function to print interface table
  *
- *  @param  : odr_frame             *frame  [frame]
- *            struct sockaddr_ll    *from   [sender address structure]
- *            socklen_t             fromlen [sender address structure length]
+ *  @param  : odr_object    *obj    [odr object]
  *  @return : void
  *
- *  Print pure text
+ *  Print all content in interface table
  * --------------------------------------------------------------------------
  */
-void debug_data_handler(odr_frame *frame, struct sockaddr_ll *from, socklen_t fromlen) {
+void debug_interface_handler(odr_object *obj) {
+    // print all interface items
     int i;
+    odr_itable *item = obj->itable;
 
-    printf("Interface index: %d, MAC address: ", from->sll_ifindex);
-    for (i = 0; i < 6; i++)
-        printf("%.2x%s", from->sll_addr[i] & 0xff, ((i == 5) ? " " : ":"));
-    printf("Data: %s\n", frame->data);
+    printf("\n");
+    printf("+- Interface name -+--- MAC address ---+ I +\n");
+    while (item) {
+        printf("| %-*s | ", IF_NAME, item->if_name);
+        for (i = 0; i < 6; i++)
+            printf("%.2x%s", item->if_haddr[i] & 0xff, (i < 5) ? ":" : " | ");
+        printf("%1d |\n", item->if_index);
+        item = item->hwa_next;
+    }
+    printf("+------------------+-------------------+---+\n");
 }
 
 
