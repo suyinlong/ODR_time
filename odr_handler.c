@@ -1,8 +1,7 @@
 /*
 * @File: odr_handler.c
 * @Date: 2015-11-14 19:51:16
-* @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-20 17:56:06
+* @Last Modified time: 2015-11-22 22:17:03
 * @Description:
 *     ODR frame and queued packet handler
 *     - void send_rreq(odr_object *obj, char *dst, char *src, uint hopcnt, uint bcast_id, int frdflag, int resflag)
@@ -13,6 +12,8 @@
 *         [MAC address compare function]
 *     - void send_dgram(odr_object *obj, odr_apacket *appmsg)
 *         [Dgram APPMSG send function]
+*     - void InsertOrUpdateRoutingTable(odr_object *obj, odr_rtable *item, char *dst, char *nexthop, int index, uint hopcnt)
+*         [Insert or update routing table]
 *     + void queue_handler(odr_object *obj)
 *         [Queue handler]
 *     + void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
@@ -21,10 +22,13 @@
 *         [Frame RREP handler]
 *     + void frame_appmsg_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from)
 *         [Frame APPMSG handler]
+*     + void debug_route_handler(odr_object *obj)
+*         [Debug function to print route table]
+*     + void debug_interface_handler(odr_object *obj)
+*         [Debug function to print interface table]
 */
 
 #include "np.h"
-#include "odr_rrep.h"
 
 /* --------------------------------------------------------------------------
  *  send_rreq
@@ -177,6 +181,45 @@ void send_dgram(odr_object *obj, odr_apacket *appmsg) {
 }
 
 /* --------------------------------------------------------------------------
+ *  InsertOrUpdateRoutingTable
+ *
+ *  Route path insert or update function
+ *
+ *  @param  : odr_object    *obj        [odr object]
+ *            odr_rtable    *item       [route entry need to update/insert]
+ *            char          *dst        [destination IP address]
+ *            char          *nexthop    [next hop MAC address]
+ *            int           index       [interface index]
+ *            uint          hopcnt      [hop count]
+ *  @return : void
+ *
+ *  Insert or update routing table
+ * --------------------------------------------------------------------------
+ */
+void InsertOrUpdateRoutingTable(odr_object *obj, odr_rtable *item, char *dst, char *nexthop, int index, uint hopcnt) {
+    int i;
+    if (item == NULL)
+    {
+        // insert a new route
+        item = (odr_rtable *)Calloc(1, sizeof(odr_rtable));
+        item->next = obj->rtable;
+        obj->rtable = item;
+    }
+
+    // modify the route
+    memcpy(item->dst, dst, IPADDR_BUFFSIZE);
+    memcpy(item->nexthop, nexthop, HWADDR_BUFFSIZE);
+    item->index = index;
+    item->hopcnt = hopcnt;
+    item->timestamp = time(NULL);
+
+    printf("[Route Table] dst: %s, nexthop: ", item->dst);
+    for (i = 0; i < 6; i++)
+        printf("%.2x%s", item->nexthop[i] & 0xff, (i == 5 ? ", ": ":"));
+    printf("index: %d, hopcnt: %d\n", item->index, item->hopcnt);
+}
+
+/* --------------------------------------------------------------------------
  *  queue_handler
  *
  *  Queue handler
@@ -325,7 +368,7 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
     } else if (rreq->flag.frd == 1                          // forced discovery = true
         || rreq->hopcnt + 1 < src_ritem->hopcnt             // shorter path
         || (rreq->hopcnt + 1 == src_ritem->hopcnt
-            && strncmp(src_ritem->nexthop, frame->h_source, HWADDR_BUFFSIZE) != 0)) {   // same hopcnt but different path
+            && cmp_hwaddrs(src_ritem->nexthop, frame->h_source) == 0)) {   // same hopcnt but different path
         // update the routing path (reverse route back)
         if (rreq->hopcnt + 1 < src_ritem->hopcnt)
             newhopflag = 1;
@@ -390,7 +433,50 @@ void frame_rreq_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *f
  * --------------------------------------------------------------------------
  */
 void frame_rrep_handler(odr_object *obj, odr_frame *frame, struct sockaddr_ll *from) {
-    HandleRREP(obj, frame, from);
+    int idx = 0, i;
+    bool needReply = false;
+
+    odr_rpacket *rrep = (odr_rpacket *)frame->data;
+    printf("[rrep_handler] Received RREP (dst: %s src: %s hopcnt: %d)\n", rrep->dst, rrep->src, rrep->hopcnt);
+    printf("               from interface %d mac: ", from->sll_ifindex);
+    for (i = 0; i < 6; i++)
+        printf("%.2x%s", frame->h_source[i] & 0xff, (i < 5) ? ":" : "\n");
+    // get the 'forward' route from routing table
+    odr_rtable *dst_ritem = get_item_rtable(rrep->dst, obj);
+
+    if (dst_ritem == NULL || dst_ritem->hopcnt > rrep->hopcnt + 1) {
+        InsertOrUpdateRoutingTable(obj, dst_ritem, rrep->dst, from->sll_addr, from->sll_ifindex, rrep->hopcnt + 1);
+        if (strcmp(obj->ipaddr, rrep->src) != 0)
+            needReply = true;
+        else
+            printf("[rrep_handler] RREP reached source node (%s)\n", rrep->src);
+    }
+
+    if (needReply)
+    {
+        // build apacket item
+        odr_queue_item  *item = (odr_queue_item *)Calloc(1, sizeof(odr_queue_item));
+        rrep->hopcnt ++;
+
+        memcpy(item->data, rrep, ODR_FRAME_PAYLOAD);
+
+        item->type = ODR_FRAME_RREP;
+        item->timestamp = time(NULL);
+        item->next = NULL;
+
+        // insert into queue
+        if (obj->queue.head == NULL) {
+            obj->queue.head = item;
+            obj->queue.tail = item;
+        } else {
+            obj->queue.tail->next = item;
+            obj->queue.tail = item;
+        }
+        printf("Queued up rrep_packet [DST: %s SRC: %s HOPCNT: %d FRD:%d]\n", rrep->dst, rrep->src, rrep->hopcnt, rrep->flag.frd);
+
+    }
+
+    queue_handler(obj);
 }
 
 /* --------------------------------------------------------------------------

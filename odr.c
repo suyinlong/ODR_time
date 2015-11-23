@@ -1,8 +1,7 @@
 /*
 * @File: odr.c
 * @Date: 2015-11-08 20:56:07
-* @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-19 19:41:19
+* @Last Modified time: 2015-11-22 19:39:01
 * @Description:
 *     ODR main program, provides maintenance features of odr_object
 *     + odr_itable *get_item_itable(int index, odr_object *obj)

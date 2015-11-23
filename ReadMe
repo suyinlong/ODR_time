@@ -1,0 +1,332 @@
+AUTHORS INFORMATION
+==================
+
+Author 1    :   Yinlong Su
+Student ID  :   110461173
+Email       :   yinlsu@cs.stonybrook.edu
+
+Author 2    :   Jiewen Zheng
+Student ID  :   110614508
+Email       :   jiezheng@cs.stonybrook.edu
+
+
+COMPILE AND RUN
+===============
+
+Make sure the library is in right location:
+
+    libunp.a    /users/cse533/Stevens/unpv13e/libunp.a
+
+Unpack the file
+
+    tar -xvf ./odrtime.tar
+
+Execute the following from the directory 'odrtime' to compile the source code:
+
+    make                        # use "make" to compile the source
+
+Run the programs:
+
+    ./ODR_yinlsu <staleness>    # run the ODR service
+
+    ./server_yinlsu             # run the server
+
+    ./client_yinlsu             # run the client
+
+
+SYSTEM DOCUMENTATION
+====================
+
+This program is a client/server time application using domain datagram socket
+to communicate with ODR protocol routing services on PF_PACKET sockets to
+exchange messages.
+
+1.  Server part (server.c odr_api.c)
+
+    a.  Well-known sun_path name and port
+        The time application server has well-known sun_path name and port
+        defined in np.h header file.
+        TIMESERV_PATH   /tmp/14508-61375-timeServer
+        TIMESERV_PORT   14508
+
+    b.  Work cycle
+        After creating domain socket and getting the canonical IP address of
+        the node, the server goes into work cycle. It will try to use ODR API
+        function msg_recv() to get a message from ODR service, then send back
+        the time information using ODR API function msg_send().
+
+
+2.  Client part (client.c odr_api.c)
+
+    a.  Temporary sun_path name and port
+        Unlike the server, the time application client has temporary sun_path
+        name. The complete path will be filled by system call mkstemp().
+        TIMECLIE_PATH   /tmp/14508-61375-timeClient-XXXXXX
+        Port number will be assigned once the client sends datagram to ODR
+        service using msg_send() on domain socket. The pair <path, port #> will
+        uniquely identify a client. The entry will be removed if no
+        communication between the client and ODR service for 3 minutes.
+
+    b.  Work cycle
+        After creating domain socket and getting the canonical IP address of
+        the node, the client goes into work cycle. The client will do as
+        follows:
+        1. Prompt user to input the server node name, or exit the program;
+        2. Verify the validity of the node, continue if valid;
+        3. Call API msg_send() to send a datagram to ODR service, this datagram
+           contains server IP address and port number;
+        4. Try to receive the reply by using API msg_recv(), if receive the
+           message from server, print it and go to step 1;
+        5. After 5 seconds the message timeouts, try to send again by using
+           'Forced discovery' flag on, if receive the message from server,
+           print it out and go to step 1;
+        6. Fail after second try, print out the error message and go to step 1.
+
+
+3.  ODR service (odr.c odr_frame.c odr_handler.c)
+
+    a.  Interface information (hwa_info/odr_itable)
+        We modify the get_hw_addrs() function to better satisfy our needs.
+        First, get_hw_addrs() will also find out the canonical IP address for
+        the node (i.e. primary IP address for interface 'eth0'). Second, the
+        structure hwa_info returned by the function will not contain 'lo' and
+        'eth0' therefore we can simply enumerate all interface in odr_itable
+        when broadcasting.
+
+    b.  Route table (odr_rtable)
+        In our program, the route table is a linked list of route entries.
+
+        typedef struct odr_rtable_t {
+            char    dst[IPADDR_BUFFSIZE];       /* destination IP addr  */
+            char    nexthop[HWADDR_BUFFSIZE];   /* next hop MAC address */
+            int     index;                      /* interface index      */
+            uint    hopcnt;                     /* hop count            */
+            long    timestamp;                  /* timestamp of update  */
+            struct odr_rtable_t *next;          /* next entry pointer   */
+        } odr_rtable;
+
+        The destination is identified by the canonical IP address of the node.
+        In order to send a message to the destination, ODR will also record the
+        interface index and next hop MAC address it should use. The hop count
+        to the destination is also stored in route entries. The timestamp is
+        used for comparing to current time and 'staleness' parameter to judge
+        whether this entry is stale or not.
+
+    c.  Port table (odr_ptable)
+        While ODR service dealing with multiple clients and one server on the
+        same node, it is important to identify which sun_path name it should
+        talk to.
+
+        typedef struct odr_ptable_t {
+            int     port;                       /* port number  */
+            char    path[PATHNAME_BUFFSIZE];    /* path name    */
+            ulong   timestamp;                  /* timestamp    */
+            struct odr_ptable_t *next;          /* next item    */
+        } odr_ptable;
+
+        The port table records all pairs of <port, path>. Timestamp saves the
+        last communication time between this path and ODR service. ODR service
+        will purge the entry if there is no message coming more than 3 minutes.
+        Note that the server port and path is 'well-known' and thus will not be
+        removed by the ODR serivce.
+
+    d.  Frame structure (odr_frame)
+        ODR frame has 124 bytes. It will be 128 bytes when the kernel adding 4
+        bytes frame check sequence to the frame.
+
+        typedef struct odr_frame_t {
+            uchar   h_dest[ETH_ALEN];           /* destination eth addr */
+            uchar   h_source[ETH_ALEN];         /* source ether addr    */
+            ushort  h_proto;                    /* packet type ID field */
+            ushort  h_type;                     /* frame type           */
+            char    data[ODR_FRAME_PAYLOAD];    /* frame payload        */
+        }__attribute__((packed)) odr_frame;
+
+        The structure is very similar to the normal frame structure. We add a
+        frame type attribute in the header to specify the type. The frame type
+        can be:
+
+        - ODR_FRAME_RREQ        RREQ frame
+        - ODR_FRAME_RREP        RREP frame
+        - ODR_FRAME_APPMSG      APPMSG frame
+        - ODR_FRAME_ROUTE       Debug frame, we use it to print route table
+        - ODR_FRAME_INTERFACE   Debug frame, we use it to print interface table
+
+        The data payload will be either route packet (odr_rpacket) or appmsg
+        packet (odr_apacket).
+
+        typedef struct odr_rpacket_t {
+            char             dst[IPADDR_BUFFSIZE];   /* destination ip addr  */
+            char             src[IPADDR_BUFFSIZE];   /* source ip addr       */
+            odr_rpacket_flag flag;                   /* route packet flag    */
+            uint             hopcnt;                 /* hop count            */
+            uint             bcast_id;               /* broadcast id         */
+            char             unused[ODR_RPACKET_PAYLOAD];
+        } odr_rpacket;
+
+        typedef struct odr_rpacket_flag_t {
+            BITFIELD8   req : 1; /* RREQ flag */
+            BITFIELD8   rep : 1; /* RREP flag */
+            BITFIELD8   frd : 1; /* forced (re)discovery flag */
+            BITFIELD8   res : 1; /* reply already sent flag */
+            BITFIELD8   r04 : 1;
+            BITFIELD8   r05 : 1;
+            BITFIELD8   r06 : 1;
+            BITFIELD8   r07 : 1;
+        } odr_rpacket_flag;
+
+        The RREQ and RREP frames use odr_rpacket. It contains destination and
+        source IP address, flag, hop count and broadcast id. The flag indicates
+        forced discovery and reply already sent information.
+
+        typedef struct odr_apacket_t {
+            char    dst[IPADDR_BUFFSIZE];       /* destination IP address   */
+            int     dst_port;                   /* destination port number  */
+            char    src[IPADDR_BUFFSIZE];       /* source IP address        */
+            int     src_port;                   /* source port number       */
+            uint    hopcnt;                     /* hop count                */
+            uchar   frd;                        /* forced discovery flag    */
+            int     length;                     /* data length              */
+            char    data[ODR_APACKET_PAYLOAD];  /* data payload (app)       */
+        } odr_apacket;
+
+        The APPMSG frames use odr_apacket. It contains destination and source
+        IP address and port number. The hop count is also included so we can
+        use it as RREP message to build a route path. The data part in apacket
+        can store the time string created by the server.
+
+    e.  Datagram (odr_dgram) and ODR API
+        Datagram is used for exchange message between client/server and ODR
+        service.
+
+        typedef struct odr_dgram_t {
+            char    ipaddr[IPADDR_BUFFSIZE];    /* IP address                */
+            int     port;                       /* port number               */
+            int     flag;                       /* forced discovery flag     */
+            char    data[ODR_DGRAM_DATALEN];    /* data field in odr_apacket */
+        } odr_dgram;
+
+        The datagram structure records the sender's or receiver's (depending on
+        the direction from C/S to ODR or ODR to C/S) IP address and port
+        number.
+
+        + int msg_send(int sockfd, char *dst, int port, char *data, int flag)
+          [ODR API message send function]
+        + int msg_recv(int sockfd, char *data, char *src, int *port)
+          [ODR API message receive function]
+
+        When calling ODR API function msg_send(). The API will fill the
+        datagram with receiver's IP address and port number as well as flag and
+        data. The datagram then will be sent to ODR service using domain
+        socket. The ODR datagram process function (process_domain_dgram) will
+        convert it into apacket and fill the sender information with node
+        canonical IP address and the <port, path> entry in ptable. Finally,
+        the apacket will be queued up and wait for processing.
+        When an APPMSG reaches destination, the ODR service will convert it
+        into datagram and write to the path according to the entry
+        <port, path> in ptable. The API function msg_recv() will fill the data,
+        source address and port number and return back to the client or server.
+        We implemented timeout mechanism in msg_recv(). After 5 seconds, the
+        select() will return whether the message is received or not.
+
+    f.  Queue for unicast frames (odr_queue)
+        We implement queue structure in ODR service. The queue is used for
+        unicast frames. The reason why broadcast frames do not need queue is
+        that RREQ will send to all interfaces by broadcasting thus has no
+        situation like 'destination unreachable'. It is obvious that the APPMSG
+        frames need to queue up. We also queue up RREP frames because when RREP
+        returns back, one intermediate node may has a stale route path to the
+        source thus this node needs to queue up RREP and broadcast RREQ first.
+        Although this situation will almost never happen unless you have set
+        the staleness to a unreasonable small value. We implemented anyway for
+        the robustness of the program.
+
+        typedef struct odr_queue_item_t {
+            ushort  type;                       /* frame type       */
+            long    timestamp;                  /* queue timestamp  */
+            char    data[ODR_FRAME_PAYLOAD];    /* frame payload    */
+            struct odr_queue_item_t *next;
+        } odr_queue_item;
+
+        typedef struct odr_queue_t {
+            odr_queue_item *head;
+            odr_queue_item *tail;
+        } odr_queue;
+
+        The queue item also has a timestamp. In client, a message will timeout
+        after 5 seconds and will retry only once. So the queue item will be
+        valid for 5 seconds. If it fails to send out, the item will be removed
+        and the client will send a new item with forced discovery flag on.
+        Also we can not let a queue item stay forever. If the destination node
+        is not on-line and we keep trying, the following valid frames will
+        never be sent out.
+
+    g.  Sockets (in odr.c)
+        The ODR service creates two sockets: Unix domain socket and PF_PACKET
+        socket. The domain socket will bind to path "/tmp/14508-61375-timeODR".
+        We only need one PF_PACKET socket because recvfrom() function will fill
+        the sender information thus we can know the interface index which the
+        frame is from.
+        We use select() to process both sockets. When select() returns, the
+        first thing we do is to purge the invalid entries in ptable and rtable.
+        Then we will process the frame or datagram. For frame, we will call
+        different handler according to the type of frame. For datagram, we
+        convert and fill it into APPMSG then queue it up (described before).
+        We will discuss the handlers in detail later.
+
+    h.  Handlers (in odr_handler.c)
+        Handlers are used for processing received frames.
+
+        i)  Queue handler
+            We queue up APPMSG/RREP in our ODR service. The handler works as
+            follows:
+
+            For the APPMSG/RREP in queue, find the destination routing path in
+            rtable.
+            - If the destination is currently unreachable, send RREQ
+            - If the forced discovery flag is set, send RREQ with flag.frd
+            - Otherwise, send the frame via routing interface
+
+        ii) RREQ handler
+            The broadcast id of RREQs received by ODR service will be recorded
+            by a two-dimension array.
+
+            The RREQ handler will insert or update the reverse route entry if
+            any of these is true:
+            - Never saw this source before
+            - RREQ is new from the source
+            - Forced discovery flag is on (forced update)
+            - Reverse path is more efficient
+            - Reverse path is same efficient but a different path
+
+            The RREQ handler will reply RREP if any of these is true:
+            - The node is destination and this RREQ is new
+            - The node is intermediate node that has route path to destination
+              and the reverse path is more efficient
+            - The node is intermediate node that has route path to destination
+              and forced discovery flag is off
+              and reply already sent flag is off
+              and nexthop is different with frame source (split horizon)
+
+            The RREQ handler will broadcast RREQ if any of these is true:
+            - The reverse path is more efficient
+            - The destination is unknown and the RREQ is new
+            - The destination is known and the source is new
+
+        iii)RREP handler
+            The RREP handler will insert/update the route table if possible.
+            Then decide to whether relay it or not.
+
+            The RREP handler will insert or update the route entry if any of
+            these is true:
+            - The destination does not exist in route table
+            - The path to destination is more efficient
+
+            If the RREP reaches the source, then after inserting or updating
+            the route path, RREQ handler will call queue handler to try to
+            process the frame in queue. Otherwise, RREP handler will queue up
+            the RREP it received and call queue handler to process it.
+
+        iv) APPMSG handler
+            The APPMSG handler will do exactly the same as RREP handler.
+

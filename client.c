@@ -1,8 +1,7 @@
 /*
 * @File: client.c
 * @Date: 2015-11-08 20:57:18
-* @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-18 22:33:43
+* @Last Modified time: 2015-11-22 19:38:29
 * @Description:
 *     + int main(int argc, char **argv)
 *         [Client entry function]

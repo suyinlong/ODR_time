@@ -2,6 +2,7 @@
 #define __np_h
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <errno.h>      /* error numbers */
 #include <sys/ioctl.h>  /* ioctls */
 #include <sys/file.h>

@@ -1,14 +1,15 @@
 /*
 * @File: utils.c
 * @Date: 2015-11-10 22:56:21
-* @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-18 16:24:42
+* @Last Modified time: 2015-11-22 19:45:25
 * @Description:
 *     Util function library, some miscellaneous helper functions
 *     + int util_ip_to_hostname(const char *ipaddr, char *hostname)
 *         [Convert IP address to hostname]
 *     + int util_hostname_to_ip(const char *hostname, char *ipaddr)
 *         [Convert hostname to IP address]
+*     + int util_ip_to_index(const char *ipaddr)
+*         [Convert IP address to index]
 */
 
 #include "np.h"

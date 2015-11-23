@@ -1,8 +1,7 @@
 /*
 * @File: get_hw_addrs.c
 * @Date: 2015-11-11 10:04:27
-* @Last Modified by:   Yinlong Su
-* @Last Modified time: 2015-11-14 20:19:39
+* @Last Modified time: 2015-11-22 19:38:43
 * @Description:
 *     - odr_itable *get_hw_addrs(char *obj_ipaddr)
 *         [Get the hardware address on all interfaces]
