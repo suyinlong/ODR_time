@@ -328,5 +328,14 @@ exchange messages.
             the RREP it received and call queue handler to process it.
 
         iv) APPMSG handler
-            The APPMSG handler will do exactly the same as RREP handler.
+            The APPMSG handler acts very similar to the RREP handler.
+
+            The APPMSG handler will insert or update the route entry according
+            to the source address, hop count and previous sender information.
+            This is same as RREP message.
+
+            If the APPMSG reaches the destination, then ODR service will pass
+            the message to the path name registed in port-path table.
+            Otherwise, APPMSG will be relay to next hop via a route to the
+            destination.
 

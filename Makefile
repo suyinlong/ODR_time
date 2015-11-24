@@ -3,7 +3,7 @@ CC = gcc
 USR = yinlsu
 UNP_DIR = /users/cse533/Stevens/unpv13e
 
-LIBS = -lpthread ${UNP_DIR}/libunp.a
+LIBS = ${UNP_DIR}/libunp.a
 
 FLAGS = -g -O2
 
@@ -43,12 +43,6 @@ client.o: client.c
 
 get_hw_addrs.o: get_hw_addrs.c
 	${CC} ${CFLAGS} -c get_hw_addrs.c
-
-test_route: test_route.o odr_frame.o get_hw_addrs.o
-	${CC} ${CFLAGS} -o test_route test_route.o odr_frame.o get_hw_addrs.o ${LIBS}
-
-test_route.o: test_route.c
-	${CC} ${CFLAGS} -c test_route.c
 
 clean:
 	rm -f ODR_${USR} server_${USR} client_${USR} *.o

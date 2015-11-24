@@ -1,7 +1,7 @@
 /*
 * @File: utils.c
 * @Date: 2015-11-10 22:56:21
-* @Last Modified time: 2015-11-22 19:45:25
+* @Last Modified time: 2015-11-23 20:11:50
 * @Description:
 *     Util function library, some miscellaneous helper functions
 *     + int util_ip_to_hostname(const char *ipaddr, char *hostname)
@@ -59,7 +59,7 @@ int util_ip_to_hostname(const char *ipaddr, char *hostname) {
 int util_hostname_to_ip(const char *hostname, char *ipaddr) {
     struct hostent      *he;
     he = gethostbyname(hostname);
-    if (he == NULL) {
+    if (he == NULL || hostname[0] != 'v' || hostname[1] != 'm') {
         printf("util_hostname_to_ip error: gethostbyname error for %s\n", hostname);
         return -1;
     }
